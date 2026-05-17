@@ -5,6 +5,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use crate::tasks::TaskGraph;
 use crate::types::OmdAgent;
 
 /// Current session state — written to current.json on every transition
@@ -16,6 +17,8 @@ pub struct OmdSessionState {
     pub started_at: String,
     pub updated_at: String,
     pub session_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_graph: Option<TaskGraph>,
 }
 
 impl OmdSessionState {
@@ -34,6 +37,7 @@ impl OmdSessionState {
             started_at: now.clone(),
             updated_at: now,
             session_id,
+            task_graph: None,
         }
     }
 
