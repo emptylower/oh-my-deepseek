@@ -351,6 +351,14 @@ pub fn home_dashboard(app: &mut App) -> CommandResult {
             let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeYoloModeTip));
             let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeYoloModeCaution));
         }
+        AppMode::OmdFuxi | AppMode::OmdHongjun => {
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomePlanModeTip));
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomePlanModeChecklistTip));
+        }
+        AppMode::OmdPangu => {
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeYoloModeTip));
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeYoloModeCaution));
+        }
     }
 
     CommandResult::message(stats)

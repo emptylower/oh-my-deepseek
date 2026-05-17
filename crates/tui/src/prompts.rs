@@ -348,6 +348,9 @@ pub const AGENT_MODE: &str = include_str!("prompts/modes/agent.md");
 pub const PLAN_MODE: &str = include_str!("prompts/modes/plan.md");
 pub const YOLO_MODE: &str = include_str!("prompts/modes/yolo.md");
 pub const TONGTIAN_MODE: &str = include_str!("../../omd/src/prompts/tongtian.md");
+pub const FUXI_MODE: &str = include_str!("../../omd/src/prompts/fuxi.md");
+pub const PANGU_MODE: &str = include_str!("../../omd/src/prompts/pangu.md");
+pub const HONGJUN_MODE: &str = include_str!("../../omd/src/prompts/hongjun.md");
 
 /// Approval-policy overlays — whether tool calls are auto-approved,
 /// require confirmation, or are blocked.
@@ -413,6 +416,9 @@ fn mode_prompt(mode: AppMode) -> &'static str {
     match mode {
         AppMode::Agent => AGENT_MODE,
         AppMode::OmdTongtian => TONGTIAN_MODE,
+        AppMode::OmdFuxi => FUXI_MODE,
+        AppMode::OmdPangu => PANGU_MODE,
+        AppMode::OmdHongjun => HONGJUN_MODE,
         AppMode::Yolo => YOLO_MODE,
         AppMode::Plan => PLAN_MODE,
     }
@@ -420,17 +426,17 @@ fn mode_prompt(mode: AppMode) -> &'static str {
 
 fn default_approval_mode_for_mode(mode: AppMode) -> ApprovalMode {
     match mode {
-        AppMode::Agent => ApprovalMode::Suggest,
-        AppMode::Yolo | AppMode::OmdTongtian => ApprovalMode::Auto,
+        AppMode::Agent | AppMode::OmdFuxi | AppMode::OmdHongjun => ApprovalMode::Suggest,
+        AppMode::Yolo | AppMode::OmdTongtian | AppMode::OmdPangu => ApprovalMode::Auto,
         AppMode::Plan => ApprovalMode::Never,
     }
 }
 
 fn approval_prompt_for_mode(mode: AppMode, approval_mode: ApprovalMode) -> &'static str {
     match mode {
-        AppMode::Yolo | AppMode::OmdTongtian => AUTO_APPROVAL,
+        AppMode::Yolo | AppMode::OmdTongtian | AppMode::OmdPangu => AUTO_APPROVAL,
         AppMode::Plan => NEVER_APPROVAL,
-        AppMode::Agent => match approval_mode {
+        AppMode::Agent | AppMode::OmdFuxi | AppMode::OmdHongjun => match approval_mode {
             ApprovalMode::Auto => AUTO_APPROVAL,
             ApprovalMode::Suggest => SUGGEST_APPROVAL,
             ApprovalMode::Never => NEVER_APPROVAL,

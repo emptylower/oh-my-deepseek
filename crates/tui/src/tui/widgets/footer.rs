@@ -293,11 +293,14 @@ fn mode_style(app: &App) -> (&'static str, Color) {
         AppMode::Yolo => "yolo",
         AppMode::Plan => "plan",
         AppMode::OmdTongtian => "tongtian",
+        AppMode::OmdFuxi => "fuxi",
+        AppMode::OmdPangu => "pangu",
+        AppMode::OmdHongjun => "hongjun",
     };
     let color = match app.mode {
         AppMode::Agent => app.ui_theme.mode_agent,
-        AppMode::Yolo | AppMode::OmdTongtian => app.ui_theme.mode_yolo,
-        AppMode::Plan => app.ui_theme.mode_plan,
+        AppMode::Yolo | AppMode::OmdTongtian | AppMode::OmdPangu => app.ui_theme.mode_yolo,
+        AppMode::Plan | AppMode::OmdFuxi | AppMode::OmdHongjun => app.ui_theme.mode_plan,
     };
     (label, color)
 }

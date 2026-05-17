@@ -665,6 +665,9 @@ fn parse_mode_arg(arg: &str) -> Option<AppMode> {
         "plan" | "2" => Some(AppMode::Plan),
         "yolo" | "3" => Some(AppMode::Yolo),
         "tongtian" | "omd-tongtian" | "4" => Some(AppMode::OmdTongtian),
+        "fuxi" | "omd-fuxi" | "5" => Some(AppMode::OmdFuxi),
+        "pangu" | "omd-pangu" | "6" => Some(AppMode::OmdPangu),
+        "hongjun" | "omd-hongjun" | "7" => Some(AppMode::OmdHongjun),
         _ => None,
     }
 }
@@ -675,6 +678,9 @@ fn mode_display_name(mode: AppMode) -> &'static str {
         AppMode::Plan => "Plan",
         AppMode::Yolo => "YOLO",
         AppMode::OmdTongtian => "TONGTIAN",
+        AppMode::OmdFuxi => "FUXI",
+        AppMode::OmdPangu => "PANGU",
+        AppMode::OmdHongjun => "HONGJUN",
     }
 }
 

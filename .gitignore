@@ -95,3 +95,4 @@ apps/
 # direnv
 .envrc
 .direnv
+.omx/

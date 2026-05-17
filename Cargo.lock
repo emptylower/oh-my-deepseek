@@ -1322,6 +1322,7 @@ dependencies = [
  "image",
  "libc",
  "multimap",
+ "omd",
  "pdf-extract",
  "portable-pty",
  "pretty_assertions",
@@ -3335,6 +3336,20 @@ dependencies = [
  "bitflags 2.10.0",
  "objc2",
  "objc2-core-foundation",
+]
+
+[[package]]
+name = "omd"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]

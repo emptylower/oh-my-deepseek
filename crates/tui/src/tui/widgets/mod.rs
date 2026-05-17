@@ -498,8 +498,8 @@ impl<'a> ComposerWidget<'a> {
     fn mode_color(&self) -> Color {
         match self.app.mode {
             AppMode::Agent => palette::MODE_AGENT,
-            AppMode::Yolo | AppMode::OmdTongtian => palette::MODE_YOLO,
-            AppMode::Plan => palette::MODE_PLAN,
+            AppMode::Yolo | AppMode::OmdTongtian | AppMode::OmdPangu => palette::MODE_YOLO,
+            AppMode::Plan | AppMode::OmdFuxi | AppMode::OmdHongjun => palette::MODE_PLAN,
         }
     }
 

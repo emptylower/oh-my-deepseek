@@ -128,6 +128,9 @@ pub enum AppMode {
     Yolo,
     Plan,
     OmdTongtian,
+    OmdFuxi,
+    OmdPangu,
+    OmdHongjun,
 }
 
 /// One row in the per-turn cache-telemetry ring (`/cache` debug surface, #263).
@@ -476,6 +479,9 @@ impl AppMode {
             "plan" => Self::Plan,
             "yolo" => Self::Yolo,
             "omd-tongtian" | "tongtian" => Self::OmdTongtian,
+            "omd-fuxi" | "fuxi" => Self::OmdFuxi,
+            "omd-pangu" | "pangu" => Self::OmdPangu,
+            "omd-hongjun" | "hongjun" => Self::OmdHongjun,
             _ => Self::Agent,
         }
     }
@@ -487,6 +493,9 @@ impl AppMode {
             Self::Yolo => "yolo",
             Self::Plan => "plan",
             Self::OmdTongtian => "omd-tongtian",
+            Self::OmdFuxi => "omd-fuxi",
+            Self::OmdPangu => "omd-pangu",
+            Self::OmdHongjun => "omd-hongjun",
         }
     }
 
@@ -497,6 +506,9 @@ impl AppMode {
             AppMode::Yolo => "YOLO",
             AppMode::Plan => "PLAN",
             AppMode::OmdTongtian => "TONGTIAN",
+            AppMode::OmdFuxi => "FUXI",
+            AppMode::OmdPangu => "PANGU",
+            AppMode::OmdHongjun => "HONGJUN",
         }
     }
 
@@ -508,6 +520,9 @@ impl AppMode {
             AppMode::Yolo => "YOLO mode - full tool access without approvals",
             AppMode::Plan => "Plan mode - design before implementing",
             AppMode::OmdTongtian => "Tongtian mode - deep autonomous executor with phased workflow",
+            AppMode::OmdFuxi => "Fuxi mode - strategic planner with read-only observation",
+            AppMode::OmdPangu => "Pangu mode - autonomous builder with auto-approval",
+            AppMode::OmdHongjun => "Hongjun mode - orchestration overseer with read-only observation",
         }
     }
 }
@@ -1745,13 +1760,16 @@ impl App {
         true
     }
 
-    /// Cycle through modes: Plan → Agent → Yolo → OmdTongtian → Plan.
+    /// Cycle through modes: Plan → Agent → Yolo → OmdTongtian → OmdFuxi → OmdPangu → OmdHongjun → Plan.
     pub fn cycle_mode(&mut self) {
         let next = match self.mode {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
             AppMode::Yolo => AppMode::OmdTongtian,
-            AppMode::OmdTongtian => AppMode::Plan,
+            AppMode::OmdTongtian => AppMode::OmdFuxi,
+            AppMode::OmdFuxi => AppMode::OmdPangu,
+            AppMode::OmdPangu => AppMode::OmdHongjun,
+            AppMode::OmdHongjun => AppMode::Plan,
         };
         let _ = self.set_mode(next);
     }
@@ -1762,8 +1780,11 @@ impl App {
         let next = match self.mode {
             AppMode::Agent => AppMode::Plan,
             AppMode::Yolo => AppMode::Agent,
-            AppMode::Plan => AppMode::OmdTongtian,
+            AppMode::Plan => AppMode::OmdHongjun,
             AppMode::OmdTongtian => AppMode::Yolo,
+            AppMode::OmdFuxi => AppMode::OmdTongtian,
+            AppMode::OmdPangu => AppMode::OmdFuxi,
+            AppMode::OmdHongjun => AppMode::OmdPangu,
         };
         let _ = self.set_mode(next);
     }
