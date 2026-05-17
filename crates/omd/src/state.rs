@@ -109,4 +109,69 @@ impl OmdStateStore {
         }
         Ok(())
     }
+
+    /// Acquire a session lock. Returns Err if already locked.
+    /// Uses OpenOptions::create_new(true) for atomic creation.
+    pub fn acquire_lock(&self) -> std::io::Result<()> {
+        let lock_path = self.base_dir.join(".lock");
+        fs::create_dir_all(&self.base_dir)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&lock_path)
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    std::io::Error::new(
+                        std::io::ErrorKind::AlreadyExists,
+                        "Session lock already held. Another deepseek-omd instance may be running.",
+                    )
+                } else {
+                    e
+                }
+            })?;
+        write!(file, "{}", std::process::id())?;
+        Ok(())
+    }
+
+    /// Check if lock exists.
+    pub fn is_locked(&self) -> bool {
+        self.base_dir.join(".lock").exists()
+    }
+
+    /// Release the session lock.
+    pub fn release_lock(&self) {
+        let _ = fs::remove_file(self.base_dir.join(".lock"));
+    }
+
+    /// Write state with event: append event FIRST (source of truth), then snapshot.
+    pub fn write_state_with_event(
+        &self,
+        state: &OmdSessionState,
+        event: &serde_json::Value,
+    ) -> std::io::Result<()> {
+        self.append_event(&state.session_id, event)?;
+        self.write_state(state)?;
+        Ok(())
+    }
+
+    /// Rebuild phase from events.jsonl (for crash recovery).
+    /// Returns the last known phase from phase_transition events.
+    pub fn rebuild_from_events(&self, session_id: &str) -> Option<String> {
+        let path = self.base_dir.join(session_id).join("events.jsonl");
+        if !path.exists() {
+            return None;
+        }
+        let content = fs::read_to_string(&path).ok()?;
+        let mut last_phase = None;
+        for line in content.lines() {
+            if let Ok(event) = serde_json::from_str::<serde_json::Value>(line) {
+                if event.get("event").and_then(|v| v.as_str()) == Some("phase_transition") {
+                    if let Some(to) = event.get("to").and_then(|v| v.as_str()) {
+                        last_phase = Some(to.to_string());
+                    }
+                }
+            }
+        }
+        last_phase
+    }
 }
