@@ -1017,7 +1017,7 @@ impl Engine {
             };
             if needs_init {
                 self.omd_runtime =
-                    Some(omd::OmdRuntimeState::shared(agent, &self.session.workspace));
+                    omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
             }
         }
 

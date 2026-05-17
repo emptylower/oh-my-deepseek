@@ -5,7 +5,7 @@ use serde_json::json;
 #[test]
 fn core_hypothesis_tool_blocking_per_phase() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
 
     // EXPLORE: edit_file blocked
     let policy = PhaseToolPolicy::for_phase(state.fsm.phase());
@@ -44,7 +44,7 @@ fn core_hypothesis_tool_blocking_per_phase() {
 #[test]
 fn verify_to_execute_loopback() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
 
     // Progress to Verify
     state.handle_phase_complete("Execute", "explore done", &[]);
@@ -63,7 +63,7 @@ fn verify_to_execute_loopback() {
 #[test]
 fn invalid_transition_returns_error() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
 
     // Try to skip from Explore to Done
     let result = state.handle_phase_complete("Done", "skip everything", &[]);
@@ -75,7 +75,7 @@ fn invalid_transition_returns_error() {
 #[test]
 fn state_persists_to_disk() {
     let workspace = tempfile::tempdir().unwrap();
-    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
 
     // Check current.json exists
     let state_file = workspace.path().join(".omd/sessions/current.json");
@@ -96,7 +96,7 @@ fn state_persists_to_disk() {
 #[test]
 fn phase_transition_appends_event() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
     let session_id = state.session_state.session_id.clone();
 
     // Transition
@@ -119,7 +119,7 @@ fn phase_transition_appends_event() {
 #[test]
 fn checkpoint_saves_without_transition() {
     let workspace = tempfile::tempdir().unwrap();
-    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
     let session_id = state.session_state.session_id.clone();
 
     // Save checkpoint
@@ -136,7 +136,7 @@ fn checkpoint_saves_without_transition() {
 #[test]
 fn state_read_returns_correct_info() {
     let workspace = tempfile::tempdir().unwrap();
-    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path());
+    let state = OmdRuntimeState::new(OmdAgent::Tongtian, workspace.path()).unwrap();
 
     let info = state.handle_state_read();
     assert_eq!(info["agent"], "Tongtian");

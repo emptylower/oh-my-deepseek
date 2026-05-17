@@ -6,7 +6,7 @@ use serde_json::json;
 #[test]
 fn pangu_delegate_phase_allows_omd_delegate() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path()).unwrap();
 
     // Progress to Delegate phase: LoadPlan → Decompose → Delegate
     state.handle_phase_complete("Decompose", "loaded plan", &[]);
@@ -22,7 +22,7 @@ fn pangu_delegate_phase_allows_omd_delegate() {
 #[test]
 fn pangu_full_lifecycle() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path()).unwrap();
 
     assert_eq!(state.fsm.current_phase_name(), "LoadPlan");
     state.handle_phase_complete("Decompose", "plan loaded", &[]);
@@ -38,7 +38,7 @@ fn pangu_full_lifecycle() {
 #[test]
 fn fuxi_full_lifecycle() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Fuxi, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Fuxi, workspace.path()).unwrap();
 
     assert_eq!(state.fsm.current_phase_name(), "Interview");
     state.handle_phase_complete("Explore", "questions answered", &[]);
@@ -54,7 +54,7 @@ fn fuxi_full_lifecycle() {
 #[test]
 fn fuxi_plan_phase_is_only_writable_phase() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Fuxi, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Fuxi, workspace.path()).unwrap();
 
     // Interview — no write
     let policy = PhaseToolPolicy::for_phase(state.fsm.phase());
@@ -73,7 +73,7 @@ fn fuxi_plan_phase_is_only_writable_phase() {
 #[test]
 fn hongjun_short_lifecycle() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Hongjun, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Hongjun, workspace.path()).unwrap();
 
     assert_eq!(state.fsm.current_phase_name(), "Intake");
     state.handle_phase_complete("Route", "classified", &[]);
@@ -85,7 +85,7 @@ fn hongjun_short_lifecycle() {
 #[test]
 fn session_resumption_detects_unfinished() {
     let workspace = tempfile::tempdir().unwrap();
-    let _state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path());
+    let _state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path()).unwrap();
 
     // Should detect unfinished session (phase is LoadPlan, not Done)
     let detected = OmdRuntimeState::detect_unfinished_session(workspace.path());
@@ -96,7 +96,7 @@ fn session_resumption_detects_unfinished() {
 #[test]
 fn session_resumption_ignores_completed() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Hongjun, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Hongjun, workspace.path()).unwrap();
     state.handle_phase_complete("Route", "done", &[]);
     state.handle_phase_complete("Done", "routed", &[]);
 
@@ -108,7 +108,7 @@ fn session_resumption_ignores_completed() {
 #[test]
 fn task_graph_dag_validation_in_runtime() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path()).unwrap();
 
     let mut t1 = Task::new("T1", "First");
     t1.category = Some("implementation".to_string());
@@ -128,7 +128,7 @@ fn task_graph_dag_validation_in_runtime() {
 #[test]
 fn task_update_with_evidence() {
     let workspace = tempfile::tempdir().unwrap();
-    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path());
+    let mut state = OmdRuntimeState::new(OmdAgent::Pangu, workspace.path()).unwrap();
 
     let t1 = Task::new("T1", "Implement feature");
     state.init_task_graph(vec![t1]).unwrap();

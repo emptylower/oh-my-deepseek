@@ -24,22 +24,25 @@ pub struct OmdRuntimeState {
 }
 
 impl OmdRuntimeState {
-    pub fn new(agent: OmdAgent, workspace: &Path) -> Self {
+    pub fn new(agent: OmdAgent, workspace: &Path) -> Result<Self, String> {
         let session_id = Uuid::new_v4().to_string();
         let fsm = OmdFsm::new(agent);
         let session_state = OmdSessionState::new(agent, session_id);
         let store = OmdStateStore::new(workspace);
+        // Fail-closed: check stale lock + acquire
+        store.check_stale_lock().map_err(|e| e.to_string())?;
+        store.acquire_lock().map_err(|e| format!("Cannot acquire OMD session lock: {}", e))?;
         let _ = store.write_state(&session_state);
         let _ = store.append_event(
             &session_state.session_id,
             &json!({"ts": Utc::now().to_rfc3339(), "event": "session_start", "agent": format!("{:?}", agent), "phase": session_state.phase}),
         );
-        Self { fsm, session_state, store, task_graph: None, audit_log: Vec::new() }
+        Ok(Self { fsm, session_state, store, task_graph: None, audit_log: Vec::new() })
     }
 
     /// Create a SharedOmdRuntime (the type tools will hold)
-    pub fn shared(agent: OmdAgent, workspace: &Path) -> SharedOmdRuntime {
-        Arc::new(RwLock::new(Self::new(agent, workspace)))
+    pub fn shared(agent: OmdAgent, workspace: &Path) -> Result<SharedOmdRuntime, String> {
+        Ok(Arc::new(RwLock::new(Self::new(agent, workspace)?)))
     }
 
     /// Record a shell command execution for evidence verification.
@@ -156,5 +159,11 @@ impl OmdRuntimeState {
             v["task_graph"] = serde_json::to_value(graph).unwrap_or_default();
         }
         v
+    }
+}
+
+impl Drop for OmdRuntimeState {
+    fn drop(&mut self) {
+        self.store.release_lock_owned();
     }
 }

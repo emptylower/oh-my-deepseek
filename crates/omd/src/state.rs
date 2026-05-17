@@ -1,3 +1,6 @@
+#[cfg(unix)]
+use libc;
+
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -147,6 +150,50 @@ impl OmdStateStore {
     /// Release the session lock.
     pub fn release_lock(&self) {
         let _ = fs::remove_file(self.base_dir.join(".lock"));
+    }
+
+    /// Check for stale lock (dead PID). If stale, remove it.
+    /// If alive, return Err. If no lock exists, return Ok.
+    pub fn check_stale_lock(&self) -> std::io::Result<()> {
+        let lock_path = self.base_dir.join(".lock");
+        if !lock_path.exists() {
+            return Ok(());
+        }
+        let content = fs::read_to_string(&lock_path).unwrap_or_default();
+        let pid: u32 = content.trim().parse().unwrap_or(0);
+        if pid == 0 {
+            let _ = fs::remove_file(&lock_path);
+            return Ok(());
+        }
+        #[cfg(unix)]
+        {
+            let alive = unsafe { libc::kill(pid as libc::pid_t, 0) == 0 };
+            if !alive {
+                let _ = fs::remove_file(&lock_path);
+                return Ok(());
+            }
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = fs::remove_file(&lock_path);
+            return Ok(());
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("Lock held by PID {} (still alive)", pid),
+        ))
+    }
+
+    /// Release lock only if we own it (PID matches current process).
+    pub fn release_lock_owned(&self) {
+        let lock_path = self.base_dir.join(".lock");
+        if let Ok(content) = fs::read_to_string(&lock_path) {
+            if let Ok(pid) = content.trim().parse::<u32>() {
+                if pid == std::process::id() {
+                    let _ = fs::remove_file(&lock_path);
+                }
+            }
+        }
     }
 
     /// Write state with event: append event FIRST (source of truth), then snapshot.
