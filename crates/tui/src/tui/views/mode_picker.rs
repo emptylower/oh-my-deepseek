@@ -40,6 +40,12 @@ const MODE_ROWS: &[ModeRow] = &[
         name: "YOLO",
         hint: "Shell + trust + auto-approve",
     },
+    ModeRow {
+        mode: AppMode::OmdTongtian,
+        number: '4',
+        name: "TONGTIAN",
+        hint: "Deep autonomous executor with phased workflow",
+    },
 ];
 
 pub struct ModePickerView {

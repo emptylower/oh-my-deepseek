@@ -410,7 +410,7 @@ impl Personality {
 
 fn mode_prompt(mode: AppMode) -> &'static str {
     match mode {
-        AppMode::Agent => AGENT_MODE,
+        AppMode::Agent | AppMode::OmdTongtian => AGENT_MODE,
         AppMode::Yolo => YOLO_MODE,
         AppMode::Plan => PLAN_MODE,
     }
@@ -419,14 +419,14 @@ fn mode_prompt(mode: AppMode) -> &'static str {
 fn default_approval_mode_for_mode(mode: AppMode) -> ApprovalMode {
     match mode {
         AppMode::Agent => ApprovalMode::Suggest,
-        AppMode::Yolo => ApprovalMode::Auto,
+        AppMode::Yolo | AppMode::OmdTongtian => ApprovalMode::Auto,
         AppMode::Plan => ApprovalMode::Never,
     }
 }
 
 fn approval_prompt_for_mode(mode: AppMode, approval_mode: ApprovalMode) -> &'static str {
     match mode {
-        AppMode::Yolo => AUTO_APPROVAL,
+        AppMode::Yolo | AppMode::OmdTongtian => AUTO_APPROVAL,
         AppMode::Plan => NEVER_APPROVAL,
         AppMode::Agent => match approval_mode {
             ApprovalMode::Auto => AUTO_APPROVAL,

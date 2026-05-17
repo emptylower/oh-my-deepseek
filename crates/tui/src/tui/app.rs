@@ -127,6 +127,7 @@ pub enum AppMode {
     Agent,
     Yolo,
     Plan,
+    OmdTongtian,
 }
 
 /// One row in the per-turn cache-telemetry ring (`/cache` debug surface, #263).
@@ -474,6 +475,7 @@ impl AppMode {
         match value.trim().to_ascii_lowercase().as_str() {
             "plan" => Self::Plan,
             "yolo" => Self::Yolo,
+            "omd-tongtian" | "tongtian" => Self::OmdTongtian,
             _ => Self::Agent,
         }
     }
@@ -484,6 +486,7 @@ impl AppMode {
             Self::Agent => "agent",
             Self::Yolo => "yolo",
             Self::Plan => "plan",
+            Self::OmdTongtian => "omd-tongtian",
         }
     }
 
@@ -493,6 +496,7 @@ impl AppMode {
             AppMode::Agent => "AGENT",
             AppMode::Yolo => "YOLO",
             AppMode::Plan => "PLAN",
+            AppMode::OmdTongtian => "TONGTIAN",
         }
     }
 
@@ -503,6 +507,7 @@ impl AppMode {
             AppMode::Agent => "Agent mode - autonomous task execution with tools",
             AppMode::Yolo => "YOLO mode - full tool access without approvals",
             AppMode::Plan => "Plan mode - design before implementing",
+            AppMode::OmdTongtian => "Tongtian mode - deep autonomous executor with phased workflow",
         }
     }
 }
@@ -1740,12 +1745,13 @@ impl App {
         true
     }
 
-    /// Cycle through modes: Plan → Agent → YOLO → Plan.
+    /// Cycle through modes: Plan → Agent → Yolo → OmdTongtian → Plan.
     pub fn cycle_mode(&mut self) {
         let next = match self.mode {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
-            AppMode::Yolo => AppMode::Plan,
+            AppMode::Yolo => AppMode::OmdTongtian,
+            AppMode::OmdTongtian => AppMode::Plan,
         };
         let _ = self.set_mode(next);
     }
@@ -1756,7 +1762,8 @@ impl App {
         let next = match self.mode {
             AppMode::Agent => AppMode::Plan,
             AppMode::Yolo => AppMode::Agent,
-            AppMode::Plan => AppMode::Yolo,
+            AppMode::Plan => AppMode::OmdTongtian,
+            AppMode::OmdTongtian => AppMode::Yolo,
         };
         let _ = self.set_mode(next);
     }

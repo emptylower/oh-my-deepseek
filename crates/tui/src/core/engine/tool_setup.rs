@@ -28,7 +28,7 @@ pub(crate) fn sandbox_policy_for_mode(mode: AppMode, workspace: &Path) -> Sandbo
             exclude_tmpdir: false,
             exclude_slash_tmp: false,
         },
-        AppMode::Yolo => SandboxPolicy::DangerFullAccess,
+        AppMode::Yolo | AppMode::OmdTongtian => SandboxPolicy::DangerFullAccess,
     }
 }
 

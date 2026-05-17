@@ -917,6 +917,7 @@ impl From<&str> for DefaultModeValue {
             AppMode::Agent => Self::Agent,
             AppMode::Plan => Self::Plan,
             AppMode::Yolo => Self::Yolo,
+            AppMode::OmdTongtian => Self::Yolo,
         }
     }
 }

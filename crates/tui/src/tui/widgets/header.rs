@@ -179,7 +179,7 @@ impl<'a> HeaderWidget<'a> {
     fn mode_color(mode: AppMode) -> Color {
         match mode {
             AppMode::Agent => palette::MODE_AGENT,
-            AppMode::Yolo => palette::MODE_YOLO,
+            AppMode::Yolo | AppMode::OmdTongtian => palette::MODE_YOLO,
             AppMode::Plan => palette::MODE_PLAN,
         }
     }
@@ -189,6 +189,7 @@ impl<'a> HeaderWidget<'a> {
             AppMode::Agent => "Agent",
             AppMode::Yolo => "Yolo",
             AppMode::Plan => "Plan",
+            AppMode::OmdTongtian => "TONGTIAN",
         }
     }
 
