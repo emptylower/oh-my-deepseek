@@ -25,10 +25,25 @@ impl PhaseToolPolicy {
                 TongtianPhase::Verify => Self { allowed: &TONGTIAN_VERIFY, allow_all: false },
                 TongtianPhase::Done => Self { allowed: OMD_TOOLS, allow_all: false },
             },
-            // Stubs for Plan 2
-            OmdPhase::Fuxi(_) => Self { allowed: &FUXI_DEFAULT, allow_all: false },
-            OmdPhase::Pangu(_) => Self { allowed: &PANGU_DEFAULT, allow_all: false },
-            OmdPhase::Hongjun(_) => Self { allowed: &HONGJUN_DEFAULT, allow_all: false },
+            OmdPhase::Fuxi(p) => match p {
+                FuxiPhase::Interview => Self { allowed: &FUXI_INTERVIEW, allow_all: false },
+                FuxiPhase::Explore => Self { allowed: &FUXI_EXPLORE, allow_all: false },
+                FuxiPhase::Architect => Self { allowed: &FUXI_ARCHITECT, allow_all: false },
+                FuxiPhase::Plan => Self { allowed: &FUXI_PLAN, allow_all: false },
+                FuxiPhase::Done => Self { allowed: OMD_TOOLS, allow_all: false },
+            },
+            OmdPhase::Pangu(p) => match p {
+                PanguPhase::LoadPlan => Self { allowed: &PANGU_LOAD_PLAN, allow_all: false },
+                PanguPhase::Decompose => Self { allowed: &PANGU_DECOMPOSE, allow_all: false },
+                PanguPhase::Delegate => Self { allowed: &PANGU_DELEGATE, allow_all: false },
+                PanguPhase::Verify => Self { allowed: &PANGU_VERIFY, allow_all: false },
+                PanguPhase::Done => Self { allowed: OMD_TOOLS, allow_all: false },
+            },
+            OmdPhase::Hongjun(p) => match p {
+                HongjunPhase::Intake => Self { allowed: &HONGJUN_INTAKE, allow_all: false },
+                HongjunPhase::Route => Self { allowed: &HONGJUN_ROUTE, allow_all: false },
+                HongjunPhase::Done => Self { allowed: OMD_TOOLS, allow_all: false },
+            },
         }
     }
 
@@ -57,20 +72,57 @@ static TONGTIAN_VERIFY: &[&str] = &[
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 
-// ── Stubs for Plan 2 ─────────────────────────────────────────
+// ── Fuxi phase allowlists ─────────────────────────────────
 
-static FUXI_DEFAULT: &[&str] = &[
+static FUXI_INTERVIEW: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
-    "git_log", "git_diff", "git_status",
+    "omd_phase_complete", "omd_state_read",
+];
+static FUXI_EXPLORE: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "git_log", "git_diff", "git_show", "git_blame",
+    "omd_phase_complete", "omd_state_read",
+];
+static FUXI_ARCHITECT: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "git_log", "git_diff",
+    "omd_phase_complete", "omd_state_read",
+];
+static FUXI_PLAN: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "write_file",  // For writing .omd/plans/ (path validation is Plan 3)
+    "omd_phase_complete", "omd_state_read",
+];
+
+// ── Pangu phase allowlists ────────────────────────────────
+
+static PANGU_LOAD_PLAN: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "omd_phase_complete", "omd_state_read",
+];
+static PANGU_DECOMPOSE: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "omd_phase_complete", "omd_state_read",
+];
+static PANGU_DELEGATE: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "omd_delegate", "agent_eval", "agent_close",
+    "omd_phase_complete", "omd_checkpoint", "omd_state_read",
+];
+static PANGU_VERIFY: &[&str] = &[
+    "read_file", "grep_files", "file_search", "list_dir",
+    "exec_shell", "exec_shell_wait",
+    "omd_delegate", "agent_eval", "agent_close",
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 
-static PANGU_DEFAULT: &[&str] = &[
-    "read_file", "grep_files", "file_search", "list_dir",
-    "omd_phase_complete", "omd_checkpoint", "omd_state_read", "omd_delegate",
-];
+// ── Hongjun phase allowlists ──────────────────────────────
 
-static HONGJUN_DEFAULT: &[&str] = &[
+static HONGJUN_INTAKE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
+    "omd_phase_complete", "omd_state_read",
+];
+static HONGJUN_ROUTE: &[&str] = &[
+    "read_file",
     "omd_phase_complete", "omd_state_read",
 ];

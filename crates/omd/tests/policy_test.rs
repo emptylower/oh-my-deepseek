@@ -1,5 +1,5 @@
 use omd::policy::PhaseToolPolicy;
-use omd::types::{TongtianPhase, OmdPhase};
+use omd::types::{TongtianPhase, OmdPhase, FuxiPhase, PanguPhase, HongjunPhase};
 
 #[test]
 fn tongtian_explore_allows_read_tools_only() {
@@ -39,4 +39,57 @@ fn tongtian_verify_allows_read_plus_shell() {
     // Blocked
     assert!(!policy.is_allowed("edit_file"));
     assert!(!policy.is_allowed("write_file"));
+}
+
+#[test]
+fn fuxi_interview_explore_architect_are_read_only() {
+    for phase in &[FuxiPhase::Interview, FuxiPhase::Explore, FuxiPhase::Architect] {
+        let policy = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(*phase));
+        assert!(policy.is_allowed("read_file"), "Fuxi {:?} must allow read_file", phase);
+        assert!(policy.is_allowed("omd_phase_complete"));
+        assert!(!policy.is_allowed("edit_file"), "Fuxi {:?} must NOT allow edit_file", phase);
+        assert!(!policy.is_allowed("write_file"), "Fuxi {:?} must NOT allow write_file", phase);
+        assert!(!policy.is_allowed("agent_open"), "Fuxi {:?} must NOT allow agent_open", phase);
+    }
+}
+
+#[test]
+fn fuxi_plan_phase_allows_omd_write() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Plan));
+    assert!(policy.is_allowed("write_file"));
+    assert!(policy.is_allowed("read_file"));
+    assert!(policy.is_allowed("omd_phase_complete"));
+    assert!(!policy.is_allowed("edit_file"));
+    assert!(!policy.is_allowed("agent_open"));
+}
+
+#[test]
+fn pangu_delegate_phase_allows_delegation() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Pangu(PanguPhase::Delegate));
+    assert!(policy.is_allowed("omd_delegate"));
+    assert!(policy.is_allowed("read_file"));
+    assert!(policy.is_allowed("agent_eval"));
+    assert!(policy.is_allowed("agent_close"));
+    assert!(!policy.is_allowed("edit_file"));
+    assert!(!policy.is_allowed("write_file"));
+}
+
+#[test]
+fn pangu_verify_allows_shell_and_delegate_nuwa() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Pangu(PanguPhase::Verify));
+    assert!(policy.is_allowed("exec_shell"));
+    assert!(policy.is_allowed("omd_delegate"));
+    assert!(policy.is_allowed("read_file"));
+    assert!(!policy.is_allowed("edit_file"));
+}
+
+#[test]
+fn hongjun_is_minimal() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Hongjun(HongjunPhase::Intake));
+    assert!(policy.is_allowed("read_file"));
+    assert!(policy.is_allowed("omd_phase_complete"));
+    assert!(policy.is_allowed("omd_state_read"));
+    assert!(!policy.is_allowed("edit_file"));
+    assert!(!policy.is_allowed("exec_shell"));
+    assert!(!policy.is_allowed("omd_delegate"));
 }
