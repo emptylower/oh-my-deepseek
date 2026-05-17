@@ -1,4 +1,5 @@
 use crate::types::*;
+use crate::shell_policy::ShellPolicy;
 
 pub struct PhaseToolPolicy {
     allowed: &'static [&'static str],
@@ -54,6 +55,18 @@ impl PhaseToolPolicy {
     pub fn is_allow_all(&self) -> bool { self.allow_all }
 
     pub fn allowed_list(&self) -> &[&str] { self.allowed }
+
+    /// Get the shell policy for the current phase.
+    pub fn shell_policy(&self) -> ShellPolicy {
+        if !self.is_allowed("exec_shell") {
+            ShellPolicy::None
+        } else if self.allow_all {
+            ShellPolicy::Full
+        } else {
+            // Restricted phase with shell = ReadOnly
+            ShellPolicy::ReadOnly
+        }
+    }
 }
 
 // ── Tongtian phase allowlists ─────────────────────────────────
@@ -62,6 +75,7 @@ static TONGTIAN_EXPLORE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_status", "git_diff", "git_log", "git_show", "git_blame",
     "diagnostics",
+    "exec_shell", "exec_shell_wait",
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 

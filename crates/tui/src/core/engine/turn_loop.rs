@@ -1132,6 +1132,85 @@ impl Engine {
                     }
                 }
 
+                // OMD shell policy enforcement
+                if blocked_error.is_none()
+                    && let Some(ref phase) = omd_phase_snapshot
+                    && matches!(tool_name.as_str(), "exec_shell" | "exec_shell_wait")
+                {
+                    let policy = omd::PhaseToolPolicy::for_phase(phase);
+                    let shell_policy = policy.shell_policy();
+                    if let Some(cmd) = tool_input.get("command").and_then(|v| v.as_str()) {
+                        if let Err(reason) = omd::validate_command(cmd, shell_policy) {
+                            blocked_error = Some(ToolError::permission_denied(format!(
+                                "Shell command blocked: {}", reason
+                            )));
+                        }
+                    }
+                }
+
+                // OMD write-scope enforcement
+                if blocked_error.is_none()
+                    && let Some(ref _phase) = omd_phase_snapshot
+                {
+                    match tool_name.as_str() {
+                        "write_file" | "edit_file" => {
+                            if let Some(path) = tool_input.get("path").and_then(|v| v.as_str()) {
+                                // For now, Fuxi Plan can only write to .omd/**
+                                // Full scope from task graph is Plan 4 scope
+                                let scope = omd::WriteScopeValidator::new(&[".omd/**"]);
+                                if !scope.is_allowed(path) {
+                                    // Only enforce for non-allow_all phases
+                                    if let Some(ref phase) = omd_phase_snapshot {
+                                        let policy = omd::PhaseToolPolicy::for_phase(phase);
+                                        if !policy.is_allow_all() && policy.is_allowed("write_file") {
+                                            blocked_error = Some(ToolError::permission_denied(format!(
+                                                "Write blocked: path '{}' is outside the allowed write scope. \
+                                                 Allowed patterns: [\".omd/**\"]",
+                                                path
+                                            )));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        "apply_patch" => {
+                            if let Some(ref phase) = omd_phase_snapshot {
+                                let policy = omd::PhaseToolPolicy::for_phase(phase);
+                                if !policy.is_allow_all() && policy.is_allowed("write_file") {
+                                    let patch_content = tool_input.get("patch").and_then(|v| v.as_str()).unwrap_or("");
+                                    let scope = omd::WriteScopeValidator::new(&[".omd/**"]);
+                                    for line in patch_content.lines() {
+                                        let path_to_check = if line.starts_with("+++ b/") {
+                                            Some(&line[6..])
+                                        } else if line.starts_with("*** Add File: ") {
+                                            Some(&line[14..])
+                                        } else if line.starts_with("*** Update File: ") {
+                                            Some(&line[17..])
+                                        } else if line.starts_with("*** Delete File: ") {
+                                            Some(&line[17..])
+                                        } else if line.starts_with("*** Move to: ") {
+                                            Some(&line[13..])
+                                        } else {
+                                            None
+                                        };
+                                        if let Some(path) = path_to_check {
+                                            if !scope.is_allowed(path) {
+                                                blocked_error = Some(ToolError::permission_denied(format!(
+                                                    "Write blocked: patch targets '{}' which is outside the allowed \
+                                                     write scope. Allowed patterns: [\".omd/**\"]",
+                                                    path
+                                                )));
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 let requested_tool_name = tool_name.clone();
                 let mut tool_def = tool_catalog.iter().find(|def| def.name == tool_name);
 
