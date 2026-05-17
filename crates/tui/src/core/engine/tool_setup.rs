@@ -39,7 +39,9 @@ impl Engine {
         todo_list: SharedTodoList,
         plan_state: SharedPlanState,
     ) -> ToolRegistryBuilder {
-        let mut builder = if mode == AppMode::OmdTongtian {
+        // OmdTongtian restricted phases: return exact registry immediately.
+        // The model sees ONLY phase-allowed tools — no common tools appended.
+        if mode == AppMode::OmdTongtian {
             if let Some(ref omd_rt) = self.omd_runtime {
                 let phase = {
                     let state = tokio::task::block_in_place(|| omd_rt.blocking_read());
@@ -47,32 +49,33 @@ impl Engine {
                 };
                 let policy = omd::PhaseToolPolicy::for_phase(&phase);
 
-                let mut b = ToolRegistryBuilder::new();
-
-                // Always add OMD control tools
-                b = b
-                    .with_tool(Arc::new(crate::tools::omd::OmdPhaseCompleteTool::new(omd_rt.clone())))
-                    .with_tool(Arc::new(crate::tools::omd::OmdCheckpointTool::new(omd_rt.clone())))
-                    .with_tool(Arc::new(crate::tools::omd::OmdStateReadTool::new(omd_rt.clone())));
-
-                if policy.is_allow_all() {
-                    // Execute phase: full tooling
-                    b = b.with_agent_tools(self.session.allow_shell);
-                } else {
-                    // Restricted phase: read-only + search + git
-                    b = b
+                if !policy.is_allow_all() {
+                    // Restricted phase (Explore/Verify/Done): exact registry, early return.
+                    let mut b = ToolRegistryBuilder::new()
+                        .with_tool(Arc::new(crate::tools::omd::OmdPhaseCompleteTool::new(omd_rt.clone())))
+                        .with_tool(Arc::new(crate::tools::omd::OmdCheckpointTool::new(omd_rt.clone())))
+                        .with_tool(Arc::new(crate::tools::omd::OmdStateReadTool::new(omd_rt.clone())))
                         .with_read_only_file_tools()
                         .with_search_tools()
                         .with_git_tools();
                     if policy.is_allowed("exec_shell") {
                         b = b.with_shell_tools();
                     }
+                    return b;
                 }
-                b
-            } else {
-                // Fallback: full access (shouldn't happen — runtime should be initialized)
-                ToolRegistryBuilder::new().with_agent_tools(self.session.allow_shell)
+                // Execute phase (is_allow_all): fall through to get full tooling + common tools.
             }
+        }
+
+        // OmdTongtian-Execute, Agent, Yolo, Plan: standard registry construction.
+        let mut builder = if mode == AppMode::OmdTongtian {
+            // Must be Execute phase (restricted returned above).
+            let omd_rt = self.omd_runtime.as_ref().unwrap();
+            ToolRegistryBuilder::new()
+                .with_tool(Arc::new(crate::tools::omd::OmdPhaseCompleteTool::new(omd_rt.clone())))
+                .with_tool(Arc::new(crate::tools::omd::OmdCheckpointTool::new(omd_rt.clone())))
+                .with_tool(Arc::new(crate::tools::omd::OmdStateReadTool::new(omd_rt.clone())))
+                .with_agent_tools(self.session.allow_shell)
         } else if mode == AppMode::Plan {
             ToolRegistryBuilder::new()
                 .with_read_only_file_tools()
