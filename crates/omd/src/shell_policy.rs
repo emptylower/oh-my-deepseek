@@ -152,6 +152,14 @@ fn is_allowed_read_command(command: &str) -> bool {
         if prefix.is_empty() {
             return true;
         }
-        rest.starts_with(prefix)
+        // Exact token match: prefix must match as a complete token boundary.
+        // "diff" must match "diff HEAD" but NOT "difftool --extcmd=sh".
+        // Check: rest starts with prefix AND (rest == prefix OR next char is space).
+        if rest.starts_with(prefix) {
+            let after = &rest[prefix.len()..];
+            after.is_empty() || after.starts_with(' ')
+        } else {
+            false
+        }
     })
 }

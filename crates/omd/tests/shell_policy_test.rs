@@ -124,3 +124,13 @@ fn read_only_blocks_bare_git_tag() {
     assert!(validate_command("git tag v1.0", ShellPolicy::ReadOnly).is_err());
     assert!(validate_command("git tag --list", ShellPolicy::ReadOnly).is_ok());
 }
+
+#[test]
+fn read_only_blocks_git_difftool() {
+    // git difftool can execute arbitrary commands via --extcmd
+    assert!(validate_command("git difftool --extcmd=sh HEAD", ShellPolicy::ReadOnly).is_err());
+    assert!(validate_command("git difftool --no-prompt HEAD", ShellPolicy::ReadOnly).is_err());
+    // But git diff is still allowed
+    assert!(validate_command("git diff HEAD", ShellPolicy::ReadOnly).is_ok());
+    assert!(validate_command("git diff --stat", ShellPolicy::ReadOnly).is_ok());
+}
