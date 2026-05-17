@@ -39,7 +39,41 @@ impl Engine {
         todo_list: SharedTodoList,
         plan_state: SharedPlanState,
     ) -> ToolRegistryBuilder {
-        let mut builder = if mode == AppMode::Plan {
+        let mut builder = if mode == AppMode::OmdTongtian {
+            if let Some(ref omd_rt) = self.omd_runtime {
+                let phase = {
+                    let state = tokio::task::block_in_place(|| omd_rt.blocking_read());
+                    *state.fsm.phase()
+                };
+                let policy = omd::PhaseToolPolicy::for_phase(&phase);
+
+                let mut b = ToolRegistryBuilder::new();
+
+                // Always add OMD control tools
+                b = b
+                    .with_tool(Arc::new(crate::tools::omd::OmdPhaseCompleteTool::new(omd_rt.clone())))
+                    .with_tool(Arc::new(crate::tools::omd::OmdCheckpointTool::new(omd_rt.clone())))
+                    .with_tool(Arc::new(crate::tools::omd::OmdStateReadTool::new(omd_rt.clone())));
+
+                if policy.is_allow_all() {
+                    // Execute phase: full tooling
+                    b = b.with_agent_tools(self.session.allow_shell);
+                } else {
+                    // Restricted phase: read-only + search + git
+                    b = b
+                        .with_read_only_file_tools()
+                        .with_search_tools()
+                        .with_git_tools();
+                    if policy.is_allowed("exec_shell") {
+                        b = b.with_shell_tools();
+                    }
+                }
+                b
+            } else {
+                // Fallback: full access (shouldn't happen — runtime should be initialized)
+                ToolRegistryBuilder::new().with_agent_tools(self.session.allow_shell)
+            }
+        } else if mode == AppMode::Plan {
             ToolRegistryBuilder::new()
                 .with_read_only_file_tools()
                 .with_search_tools()

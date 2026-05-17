@@ -320,6 +320,8 @@ pub struct Engine {
     /// External sandbox backend (#516). When `Some`, exec_shell routes commands
     /// through this instead of spawning a local process.
     sandbox_backend: Option<std::sync::Arc<dyn crate::sandbox::backend::SandboxBackend>>,
+    /// OMD orchestration runtime. Created lazily on first OmdTongtian turn.
+    omd_runtime: Option<omd::SharedOmdRuntime>,
     /// Diagnostics collected during the current step's tool calls. Drained
     /// and forwarded as a synthetic user message before the next API call.
     pending_lsp_blocks: Vec<crate::lsp::DiagnosticBlock>,
@@ -555,6 +557,7 @@ impl Engine {
             pending_lsp_blocks: Vec::new(),
             workshop_vars,
             sandbox_backend,
+            omd_runtime: None,
         };
         engine.rehydrate_latest_canonical_state();
 
@@ -976,6 +979,14 @@ impl Engine {
         } else {
             approval_mode
         };
+
+        // Initialize OMD runtime on first OmdTongtian turn
+        if mode == AppMode::OmdTongtian && self.omd_runtime.is_none() {
+            self.omd_runtime = Some(omd::OmdRuntimeState::shared(
+                omd::OmdAgent::Tongtian,
+                &self.session.workspace,
+            ));
+        }
 
         // Update system prompt to match current mode and include persisted compaction context.
         self.refresh_system_prompt(mode);

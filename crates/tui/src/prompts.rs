@@ -347,6 +347,7 @@ pub const PLAYFUL_PERSONALITY: &str = include_str!("prompts/personalities/playfu
 pub const AGENT_MODE: &str = include_str!("prompts/modes/agent.md");
 pub const PLAN_MODE: &str = include_str!("prompts/modes/plan.md");
 pub const YOLO_MODE: &str = include_str!("prompts/modes/yolo.md");
+pub const TONGTIAN_MODE: &str = include_str!("../../omd/src/prompts/tongtian.md");
 
 /// Approval-policy overlays — whether tool calls are auto-approved,
 /// require confirmation, or are blocked.
@@ -410,7 +411,8 @@ impl Personality {
 
 fn mode_prompt(mode: AppMode) -> &'static str {
     match mode {
-        AppMode::Agent | AppMode::OmdTongtian => AGENT_MODE,
+        AppMode::Agent => AGENT_MODE,
+        AppMode::OmdTongtian => TONGTIAN_MODE,
         AppMode::Yolo => YOLO_MODE,
         AppMode::Plan => PLAN_MODE,
     }

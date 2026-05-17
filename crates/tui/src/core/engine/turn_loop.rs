@@ -1064,6 +1064,16 @@ impl Engine {
                 None
             };
 
+            // Snapshot OMD phase for per-call guard (once per batch)
+            let omd_phase_snapshot = if mode == AppMode::OmdTongtian {
+                self.omd_runtime.as_ref().map(|rt| {
+                    let state = tokio::task::block_in_place(|| rt.blocking_read());
+                    *state.fsm.phase()
+                })
+            } else {
+                None
+            };
+
             let active_tools_at_batch_start = active_tool_names.clone();
             let mut deferred_tools_hydrated_this_batch: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
@@ -1107,6 +1117,19 @@ impl Engine {
                     blocked_error = Some(ToolError::permission_denied(format!(
                         "Tool '{tool_name}' is unavailable in Plan mode"
                     )));
+                }
+
+                // OMD per-call phase guard — HARD enforcement
+                if blocked_error.is_none()
+                    && let Some(ref phase) = omd_phase_snapshot
+                {
+                    let policy = omd::PhaseToolPolicy::for_phase(phase);
+                    if !policy.is_allowed(&tool_name) {
+                        blocked_error = Some(ToolError::permission_denied(format!(
+                            "Tool '{}' is not available in {} phase. Allowed: {:?}. Call omd_phase_complete to transition first.",
+                            tool_name, phase.name(), policy.allowed_list()
+                        )));
+                    }
                 }
 
                 let requested_tool_name = tool_name.clone();
