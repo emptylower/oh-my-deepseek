@@ -45,6 +45,53 @@ impl OmdRuntimeState {
         Ok(Arc::new(RwLock::new(Self::new(agent, workspace)?)))
     }
 
+    /// Resume an existing session from persisted state.
+    /// Acquires lock, hydrates FSM to the persisted phase, restores task_graph.
+    pub fn resume(workspace: &Path, session_state: OmdSessionState) -> Result<Self, String> {
+        let store = OmdStateStore::new(workspace);
+        store.check_stale_lock().map_err(|e| e.to_string())?;
+        store.acquire_lock().map_err(|e| format!("Cannot acquire lock: {}", e))?;
+
+        // Determine the correct phase: prefer events.jsonl over current.json
+        let effective_phase = store.rebuild_from_events(&session_state.session_id)
+            .unwrap_or_else(|| session_state.phase.clone());
+
+        // Determine the agent from the session state
+        let agent = match session_state.agent.as_str() {
+            "Tongtian" => OmdAgent::Tongtian,
+            "Fuxi" => OmdAgent::Fuxi,
+            "Pangu" => OmdAgent::Pangu,
+            "Hongjun" => OmdAgent::Hongjun,
+            other => return Err(format!("Unknown agent: {}", other)),
+        };
+
+        // Hydrate FSM at the recovered phase
+        let fsm = OmdFsm::with_phase(agent, &effective_phase)?;
+
+        // Restore task_graph from session_state (persisted in current.json)
+        let task_graph = session_state.task_graph.clone();
+
+        // Update current.json if phase was corrected
+        let mut corrected_state = session_state;
+        if corrected_state.phase != effective_phase {
+            corrected_state.phase = effective_phase;
+            let _ = store.write_state(&corrected_state);
+        }
+
+        Ok(Self {
+            fsm,
+            session_state: corrected_state,
+            store,
+            task_graph,
+            audit_log: Vec::new(),
+        })
+    }
+
+    /// Create a SharedOmdRuntime from a resumed session
+    pub fn shared_resume(workspace: &Path, session_state: OmdSessionState) -> Result<SharedOmdRuntime, String> {
+        Ok(Arc::new(RwLock::new(Self::resume(workspace, session_state)?)))
+    }
+
     /// Record a shell command execution for evidence verification.
     pub fn push_audit_entry(&mut self, command: String, exit_code: i32) {
         self.audit_log.push((command, exit_code));
@@ -77,6 +124,7 @@ impl OmdRuntimeState {
         evidence: Option<Value>,
     ) -> Value {
         if let Some(ref mut graph) = self.task_graph {
+            let status_str = format!("{:?}", status);
             if let Err(e) = graph.set_status(task_id, status) {
                 return json!({"ok": false, "error": e});
             }
@@ -93,6 +141,7 @@ impl OmdRuntimeState {
                     "ts": Utc::now().to_rfc3339(),
                     "event": "task_update",
                     "task_id": task_id,
+                    "status": status_str,
                     "done": done,
                     "total": total
                 }),

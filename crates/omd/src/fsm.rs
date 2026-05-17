@@ -68,6 +68,21 @@ impl OmdFsm {
         }
     }
 
+    /// Resume an FSM at a specific phase (for crash recovery / session resumption).
+    pub fn with_phase(agent: OmdAgent, phase_name: &str) -> Result<Self, String> {
+        let fsm = Self::new(agent);
+        // If already at the target phase, nothing to do
+        if fsm.current_phase_name() == phase_name {
+            return Ok(fsm);
+        }
+        // Validate it's a real phase for this agent
+        if !fsm.all_phase_names().contains(&phase_name) {
+            return Err(format!("Phase '{}' is not valid for {:?}", phase_name, agent));
+        }
+        let phase = fsm.resolve_phase(phase_name);
+        Ok(Self { agent, phase })
+    }
+
     fn all_phase_names(&self) -> Vec<&'static str> {
         match self.agent {
             OmdAgent::Tongtian => vec!["Explore", "Execute", "Verify", "Done"],

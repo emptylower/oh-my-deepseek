@@ -1016,8 +1016,21 @@ impl Engine {
                 }
             };
             if needs_init {
-                self.omd_runtime =
-                    omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
+                // Check if we should resume an existing session (detected by Hongjun)
+                if self.omd_resume_context.is_some() {
+                    if let Some(session_state) = omd::OmdRuntimeState::detect_unfinished_session(&self.session.workspace) {
+                        self.omd_runtime = omd::OmdRuntimeState::shared_resume(
+                            &self.session.workspace,
+                            session_state,
+                        ).ok();
+                    } else {
+                        self.omd_runtime =
+                            omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
+                    }
+                } else {
+                    self.omd_runtime =
+                        omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
+                }
             }
         }
 
