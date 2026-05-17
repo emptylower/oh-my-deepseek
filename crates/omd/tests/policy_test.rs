@@ -13,10 +13,11 @@ fn tongtian_explore_allows_read_tools_only() {
     assert!(policy.is_allowed("git_diff"));
     assert!(policy.is_allowed("omd_phase_complete"));
     assert!(policy.is_allowed("omd_state_read"));
+    // exec_shell is allowed in Explore (read-only, per spec)
+    assert!(policy.is_allowed("exec_shell"));
     // Blocked
     assert!(!policy.is_allowed("edit_file"));
     assert!(!policy.is_allowed("write_file"));
-    assert!(!policy.is_allowed("exec_shell"));
     assert!(!policy.is_allowed("agent_open"));
 }
 

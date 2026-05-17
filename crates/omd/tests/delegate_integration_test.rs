@@ -133,6 +133,10 @@ fn task_update_with_evidence() {
     let t1 = Task::new("T1", "Implement feature");
     state.init_task_graph(vec![t1]).unwrap();
 
+    // Must go through Active before Done (lifecycle validation from Task 4)
+    let activate = state.handle_task_update("T1", TaskStatus::Active, vec![], None);
+    assert_eq!(activate["ok"], true);
+
     let evidence = json!({"type": "test_pass", "output": "15 tests pass", "exit_code": 0});
     let result = state.handle_task_update(
         "T1",
