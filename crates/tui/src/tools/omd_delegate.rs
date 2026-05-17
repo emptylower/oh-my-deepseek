@@ -151,6 +151,8 @@ impl ToolSpec for OmdDelegateTool {
             // Workers with write_scope get read-only shell (prevents shell-based file writes)
             worker_runtime.omd_shell_read_only = true;
         }
+        // Set reasoning effort from worker config
+        worker_runtime.reasoning_effort = Some(worker.reasoning_effort.to_string());
         // Fix: allow immediate child spawn (max_spawn_depth must be > spawn_depth)
         // Workers can't recurse further because agent_spawn is not in their allowed_tools
         worker_runtime.max_spawn_depth = worker_runtime.spawn_depth + 1;

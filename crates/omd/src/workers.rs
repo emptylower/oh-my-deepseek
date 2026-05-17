@@ -13,6 +13,8 @@ pub struct OmdWorkerConfig {
     pub allowed_tools: &'static [&'static str],
     pub can_write_code: bool,
     pub can_delegate: bool,
+    /// Reasoning effort level for this worker: "off", "high", or "max"
+    pub reasoning_effort: &'static str,
 }
 
 /// Registry of all available worker agents.
@@ -52,6 +54,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: true,
         can_delegate: false,
+        reasoning_effort: "high",
     },
     OmdWorkerConfig {
         id: "kunpeng",
@@ -64,6 +67,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: false,
         can_delegate: false,
+        reasoning_effort: "off",
     },
     OmdWorkerConfig {
         id: "nuwa",
@@ -77,6 +81,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: false,
         can_delegate: false,
+        reasoning_effort: "high",
     },
     OmdWorkerConfig {
         id: "shennong",
@@ -91,6 +96,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: true,
         can_delegate: false,
+        reasoning_effort: "high",
     },
     OmdWorkerConfig {
         id: "yangmei",
@@ -103,6 +109,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: false,
         can_delegate: false,
+        reasoning_effort: "off",
     },
     OmdWorkerConfig {
         id: "cangjie",
@@ -116,6 +123,7 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: true,
         can_delegate: false,
+        reasoning_effort: "off",
     },
     OmdWorkerConfig {
         id: "zhurong",
@@ -129,5 +137,6 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         ],
         can_write_code: false,
         can_delegate: false,
+        reasoning_effort: "high",
     },
 ];
