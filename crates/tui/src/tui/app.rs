@@ -1743,6 +1743,11 @@ impl App {
             self.approval_mode = restore.approval_mode;
         }
 
+        // OmdPangu and OmdTongtian use Auto approval (workers inherit parent mode)
+        if matches!(mode, AppMode::OmdPangu | AppMode::OmdTongtian) {
+            self.approval_mode = ApprovalMode::Auto;
+        }
+
         self.yolo = mode == AppMode::Yolo;
         if mode != AppMode::Plan {
             self.plan_prompt_pending = false;
