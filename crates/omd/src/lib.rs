@@ -6,5 +6,5 @@ pub mod policy;
 pub mod tools;
 
 pub use runtime::{OmdRuntimeState, SharedOmdRuntime};
-pub use types::OmdAgent;
+pub use types::{OmdAgent, OmdPhase, TongtianPhase, FuxiPhase, PanguPhase, HongjunPhase};
 pub use policy::PhaseToolPolicy;
