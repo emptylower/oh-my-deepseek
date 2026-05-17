@@ -61,6 +61,10 @@ impl Engine {
                     if policy.is_allowed("exec_shell") {
                         b = b.with_shell_tools();
                     }
+                    if policy.is_allowed("write_file") {
+                        // Fuxi Plan phase needs write_file to output .omd/plans/
+                        b = b.with_tool(Arc::new(crate::tools::file::WriteFileTool));
+                    }
                     if policy.is_allowed("omd_delegate") {
                         // Pangu's Delegate/Verify phases get delegation tools
                         if let Some(client) = self.deepseek_client.clone() {

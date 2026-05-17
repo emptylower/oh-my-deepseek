@@ -984,6 +984,21 @@ impl Engine {
             approval_mode
         };
 
+        // Detect unfinished session for Hongjun BEFORE runtime init (which writes current.json)
+        if mode == AppMode::OmdHongjun && self.omd_resume_context.is_none() {
+            if let Some(unfinished) = omd::OmdRuntimeState::detect_unfinished_session(&self.session.workspace) {
+                self.omd_resume_context = Some(format!(
+                    "\n\n## Unfinished Session Detected\n\
+                     Agent: {}\n\
+                     Phase: {}\n\
+                     Session ID: {}\n\
+                     \n\
+                     Suggest resuming this session to the user.",
+                    unfinished.agent, unfinished.phase, unfinished.session_id
+                ));
+            }
+        }
+
         // Initialize OMD runtime for any OMD mode, reinitialize if switching agents
         let requested_agent = match mode {
             AppMode::OmdTongtian => Some(omd::OmdAgent::Tongtian),
@@ -1003,21 +1018,6 @@ impl Engine {
             if needs_init {
                 self.omd_runtime =
                     Some(omd::OmdRuntimeState::shared(agent, &self.session.workspace));
-            }
-        }
-
-        // Detect unfinished session for Hongjun (first time only)
-        if mode == AppMode::OmdHongjun && self.omd_resume_context.is_none() {
-            if let Some(unfinished) = omd::OmdRuntimeState::detect_unfinished_session(&self.session.workspace) {
-                self.omd_resume_context = Some(format!(
-                    "\n\n## Unfinished Session Detected\n\
-                     Agent: {}\n\
-                     Phase: {}\n\
-                     Session ID: {}\n\
-                     \n\
-                     Suggest resuming this session to the user.",
-                    unfinished.agent, unfinished.phase, unfinished.session_id
-                ));
             }
         }
 
