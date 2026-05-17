@@ -4636,9 +4636,11 @@ mod tests {
     fn test_cycle_mode_reverse_transitions() {
         let mut app = App::new(test_options(false), &Config::default());
 
+        // Cycle: Plan → Agent → Yolo → OmdTongtian → OmdFuxi → OmdPangu → OmdHongjun → Plan
+        // Reverse from Plan → OmdHongjun
         app.mode = AppMode::Plan;
         app.cycle_mode_reverse();
-        assert_eq!(app.mode, AppMode::Yolo);
+        assert_eq!(app.mode, AppMode::OmdHongjun);
 
         app.mode = AppMode::Agent;
         app.cycle_mode_reverse();
