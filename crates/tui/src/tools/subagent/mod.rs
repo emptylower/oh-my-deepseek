@@ -38,6 +38,7 @@ use crate::tools::spec::{
 };
 use crate::tools::todo::{SharedTodoList, TodoList};
 use crate::utils::spawn_supervised;
+use omd;
 
 pub mod mailbox;
 #[allow(unused_imports)]
@@ -4313,6 +4314,11 @@ struct SubAgentToolRegistry {
     allowed_tools: Option<Vec<String>>,
     auto_approve: bool,
     registry: ToolRegistry,
+    /// OMD write-scope enforcement. When Some, write_file/edit_file/apply_patch
+    /// calls are validated against these glob patterns before execution.
+    omd_write_scope: Option<Vec<String>>,
+    /// When true, exec_shell is forced to read-only mode (blocks writes via shell).
+    omd_shell_read_only: bool,
 }
 
 impl SubAgentToolRegistry {
@@ -4321,6 +4327,17 @@ impl SubAgentToolRegistry {
         explicit_allowed_tools: Option<Vec<String>>,
         todo_list: SharedTodoList,
         plan_state: SharedPlanState,
+    ) -> Self {
+        Self::with_omd_scope(runtime, explicit_allowed_tools, todo_list, plan_state, None, false)
+    }
+
+    fn with_omd_scope(
+        runtime: SubAgentRuntime,
+        explicit_allowed_tools: Option<Vec<String>>,
+        todo_list: SharedTodoList,
+        plan_state: SharedPlanState,
+        omd_write_scope: Option<Vec<String>>,
+        omd_shell_read_only: bool,
     ) -> Self {
         // Build the full agent surface — same as the parent's Agent mode.
         // Children inherit shell, file, patch, search, web, git, diagnostics,
@@ -4343,6 +4360,8 @@ impl SubAgentToolRegistry {
             allowed_tools: explicit_allowed_tools,
             auto_approve: runtime.context.auto_approve,
             registry,
+            omd_write_scope,
+            omd_shell_read_only,
         }
     }
 
@@ -4394,6 +4413,88 @@ impl SubAgentToolRegistry {
         if !self.is_tool_allowed(name) {
             return Err(anyhow!("Tool {name} not allowed for this sub-agent"));
         }
+
+        // OMD write-scope enforcement for worker agents
+        if let Some(ref scope_patterns) = self.omd_write_scope {
+            match name {
+                "write_file" | "edit_file" => {
+                    if let Some(path) = input.get("path").and_then(|v| v.as_str()) {
+                        let validator = omd::WriteScopeValidator::from_strings(scope_patterns);
+                        if !validator.is_allowed(path) {
+                            return Err(anyhow!(
+                                "Write blocked: path '{}' is outside the allowed write scope for this task. \
+                                 Allowed patterns: {:?}",
+                                path, scope_patterns
+                            ));
+                        }
+                    }
+                }
+                "apply_patch" => {
+                    let validator = omd::WriteScopeValidator::from_strings(scope_patterns);
+                    let mut paths_to_check: Vec<String> = Vec::new();
+
+                    // Form 1: input["path"] (single-file patch mode)
+                    if let Some(path) = input.get("path").and_then(|v| v.as_str()) {
+                        paths_to_check.push(path.to_string());
+                    }
+
+                    // Form 2: input["changes"][].path (structured changes array)
+                    if let Some(changes) = input.get("changes").and_then(|v| v.as_array()) {
+                        for change in changes {
+                            if let Some(path) = change.get("path").and_then(|v| v.as_str()) {
+                                paths_to_check.push(path.to_string());
+                            }
+                        }
+                    }
+
+                    // Form 3: unified diff headers in input["patch"] text
+                    if let Some(patch) = input.get("patch").and_then(|v| v.as_str()) {
+                        for line in patch.lines() {
+                            let path = if line.starts_with("+++ b/") {
+                                let p = &line[6..];
+                                if p == "/dev/null" { None } else { Some(p) }
+                            } else if line.starts_with("+++ ") && !line.starts_with("+++ /dev/null") {
+                                Some(&line[4..])
+                            } else if line.starts_with("*** Add File: ") {
+                                Some(&line[14..])
+                            } else if line.starts_with("*** Update File: ") {
+                                Some(&line[17..])
+                            } else if line.starts_with("*** Delete File: ") {
+                                Some(&line[17..])
+                            } else if line.starts_with("*** Move to: ") {
+                                Some(&line[13..])
+                            } else {
+                                None
+                            };
+                            if let Some(p) = path {
+                                paths_to_check.push(p.to_string());
+                            }
+                        }
+                    }
+
+                    for path in &paths_to_check {
+                        if !validator.is_allowed(path) {
+                            return Err(anyhow!(
+                                "Write blocked: patch targets '{}' which is outside write scope. \
+                                 Allowed: {:?}",
+                                path, scope_patterns
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // OMD shell read-only enforcement for scoped workers
+        if self.omd_shell_read_only && matches!(name, "exec_shell" | "exec_shell_wait") {
+            if let Some(cmd) = input.get("command").and_then(|v| v.as_str()) {
+                if let Err(reason) = omd::validate_command(cmd, omd::ShellPolicy::ReadOnly) {
+                    return Err(anyhow!("Shell command blocked (worker scope active): {}", reason));
+                }
+            }
+        }
+
         if !self.auto_approve {
             let Some(spec) = self.registry.get(name) else {
                 return Err(anyhow!("Tool {name} is not registered"));
