@@ -80,8 +80,15 @@ impl ToolSpec for OmdPhaseCompleteTool {
                             ));
                         }
                     }
+                } else {
+                    // Reject unparseable evidence — all evidence must be typed
+                    return Err(ToolError::execution_failed(format!(
+                        "Evidence claim could not be parsed as a valid EvidenceClaim type. \
+                         Each evidence item must have a 'type' field (FileDiscovery, TestResult, \
+                         GitDiff, PlanArtifact, or ExplicitSkip). Got: {}",
+                        serde_json::to_string(ev_value).unwrap_or_else(|_| "???".to_string())
+                    )));
                 }
-                // If it doesn't parse as EvidenceClaim, skip it (legacy format)
             }
             drop(state); // Release read lock before acquiring write lock
         }

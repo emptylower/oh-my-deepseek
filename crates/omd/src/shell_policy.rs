@@ -35,11 +35,15 @@ const READ_ONLY_ALLOWLIST: &[(&str, &str)] = &[
     ("uname", ""), ("date", ""), ("id", ""), ("whoami", ""),
 ];
 
-/// Patterns that indicate writes even in otherwise-read commands.
+/// Patterns that indicate writes or shell escape even in otherwise-read commands.
+/// NOTE: Command substitution ($(...), backticks) and awk/python system() calls
+/// can execute arbitrary code. We block these at the string level since we don't
+/// have a full shell parser (Plan 4 scope).
 const WRITE_INDICATORS: &[&str] = &[
     ">", ">>",
     "|",  // Block ALL pipes
     "| sh", "| bash", "| zsh", "|sh", "|bash",
+    "$(", "`",  // Command substitution — can execute arbitrary code
     "sed -i", "sed --in-place",
     "find -delete", "find -exec",
     "git branch -D", "git branch -d", "git reset", "git checkout --",
@@ -55,6 +59,7 @@ pub fn validate_command(command: &str, policy: ShellPolicy) -> Result<(), String
 }
 
 fn validate_read_only(command: &str) -> Result<(), String> {
+    // Check for write indicators / shell escape patterns first
     for indicator in WRITE_INDICATORS {
         if command.contains(indicator) {
             if *indicator == "|" {
@@ -65,10 +70,26 @@ fn validate_read_only(command: &str) -> Result<(), String> {
                 );
             }
             return Err(format!(
-                "Command contains write indicator '{}'. Only read-only commands allowed.",
+                "Command contains write/escape indicator '{}'. Only read-only commands allowed.",
                 indicator
             ));
         }
+    }
+
+    // Block awk/python system() calls that can execute arbitrary code
+    if command.contains("system(") || command.contains("system (") {
+        return Err(
+            "Command contains system() call which can execute arbitrary code. \
+             Not allowed in read-only mode.".to_string()
+        );
+    }
+
+    // Block git diff --output (writes to file)
+    if command.contains("--output=") || command.contains("--output ") {
+        return Err(
+            "Command contains --output which writes to a file. Not allowed in read-only mode."
+                .to_string()
+        );
     }
 
     let subcommands = split_command_chain(command);

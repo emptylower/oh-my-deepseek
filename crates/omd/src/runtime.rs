@@ -109,9 +109,9 @@ impl OmdRuntimeState {
             Ok(()) => {
                 let to = self.fsm.current_phase_name();
                 self.session_state.update_phase(to);
-                let _ = self.store.write_state(&self.session_state);
-                let _ = self.store.append_event(
-                    &self.session_state.session_id,
+                // Contract 5: append event FIRST (source of truth), then snapshot
+                let _ = self.store.write_state_with_event(
+                    &self.session_state,
                     &json!({"ts": Utc::now().to_rfc3339(), "event": "phase_transition", "from": from, "to": to, "reason": reason, "evidence": evidence}),
                 );
                 // Clear audit log on phase transition (evidence is phase-scoped)
