@@ -641,6 +641,11 @@ pub struct SubAgentRuntime {
     pub parent_completion_tx: Option<mpsc::UnboundedSender<SubAgentCompletion>>,
     /// Snapshot of the request prefix visible to an opt-in forked child.
     pub fork_context: Option<SubAgentForkContext>,
+    /// OMD write-scope globs for this sub-agent. When Some, file writes are
+    /// validated against these patterns at the tool dispatch layer.
+    pub omd_write_scope: Option<Vec<String>>,
+    /// When true, shell commands are forced to read-only mode.
+    pub omd_shell_read_only: bool,
 }
 
 impl SubAgentRuntime {
@@ -674,6 +679,8 @@ impl SubAgentRuntime {
             mailbox: None,
             parent_completion_tx: None,
             fork_context: None,
+            omd_write_scope: None,
+            omd_shell_read_only: false,
         }
     }
 
@@ -797,6 +804,8 @@ impl SubAgentRuntime {
             mailbox: self.mailbox.clone(),
             parent_completion_tx: self.parent_completion_tx.clone(),
             fork_context: self.fork_context.clone(),
+            omd_write_scope: self.omd_write_scope.clone(),
+            omd_shell_read_only: self.omd_shell_read_only,
         }
     }
 
@@ -3319,11 +3328,13 @@ async fn run_subagent(
         messages: messages.clone(),
         structured_state_block: None,
     });
-    let tool_registry = SubAgentToolRegistry::new(
-        runtime_for_tools,
+    let tool_registry = SubAgentToolRegistry::with_omd_scope(
+        runtime_for_tools.clone(),
         allowed_tools.clone(),
         Arc::new(Mutex::new(TodoList::new())),
         Arc::new(Mutex::new(PlanState::default())),
+        runtime_for_tools.omd_write_scope.clone(),
+        runtime_for_tools.omd_shell_read_only,
     );
     let unavailable_tools = tool_registry.unavailable_allowed_tools();
     if !unavailable_tools.is_empty() {

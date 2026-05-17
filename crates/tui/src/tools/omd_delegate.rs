@@ -144,7 +144,18 @@ impl ToolSpec for OmdDelegateTool {
             "fork_context": false,
         });
 
-        let spawn_tool = AgentSpawnTool::new(self.manager.clone(), self.subagent_runtime.clone());
+        // Build a runtime with OMD scope for this worker
+        let mut worker_runtime = self.subagent_runtime.clone();
+        if !write_scope.is_empty() {
+            worker_runtime.omd_write_scope = Some(write_scope.clone());
+            // Workers with write_scope get read-only shell (prevents shell-based file writes)
+            worker_runtime.omd_shell_read_only = true;
+        }
+        // Fix: allow immediate child spawn (max_spawn_depth must be > spawn_depth)
+        // Workers can't recurse further because agent_spawn is not in their allowed_tools
+        worker_runtime.max_spawn_depth = worker_runtime.spawn_depth + 1;
+
+        let spawn_tool = AgentSpawnTool::new(self.manager.clone(), worker_runtime);
         let result = spawn_tool.execute(spawn_input, context).await?;
 
         // Log delegation event
