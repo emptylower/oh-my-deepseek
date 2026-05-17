@@ -322,6 +322,8 @@ pub struct Engine {
     sandbox_backend: Option<std::sync::Arc<dyn crate::sandbox::backend::SandboxBackend>>,
     /// OMD orchestration runtime. Created lazily on first OmdTongtian turn.
     omd_runtime: Option<omd::SharedOmdRuntime>,
+    /// Hongjun session resumption context, populated on first OmdHongjun turn
+    omd_resume_context: Option<String>,
     /// Diagnostics collected during the current step's tool calls. Drained
     /// and forwarded as a synthetic user message before the next API call.
     pending_lsp_blocks: Vec<crate::lsp::DiagnosticBlock>,
@@ -436,6 +438,7 @@ impl Engine {
                     project_context_pack_enabled: config.project_context_pack_enabled,
                     locale_tag: &config.locale_tag,
                     translation_enabled: config.translation_enabled,
+                    omd_resume_context: None,
                 },
                 session.approval_mode,
             );
@@ -558,6 +561,7 @@ impl Engine {
             workshop_vars,
             sandbox_backend,
             omd_runtime: None,
+            omd_resume_context: None,
         };
         engine.rehydrate_latest_canonical_state();
 
@@ -999,6 +1003,21 @@ impl Engine {
             if needs_init {
                 self.omd_runtime =
                     Some(omd::OmdRuntimeState::shared(agent, &self.session.workspace));
+            }
+        }
+
+        // Detect unfinished session for Hongjun (first time only)
+        if mode == AppMode::OmdHongjun && self.omd_resume_context.is_none() {
+            if let Some(unfinished) = omd::OmdRuntimeState::detect_unfinished_session(&self.session.workspace) {
+                self.omd_resume_context = Some(format!(
+                    "\n\n## Unfinished Session Detected\n\
+                     Agent: {}\n\
+                     Phase: {}\n\
+                     Session ID: {}\n\
+                     \n\
+                     Suggest resuming this session to the user.",
+                    unfinished.agent, unfinished.phase, unfinished.session_id
+                ));
             }
         }
 
@@ -1814,6 +1833,7 @@ impl Engine {
                 project_context_pack_enabled: self.config.project_context_pack_enabled,
                 locale_tag: &self.config.locale_tag,
                 translation_enabled: self.config.translation_enabled,
+                omd_resume_context: self.omd_resume_context.as_deref(),
             },
             self.session.approval_mode,
         );

@@ -3818,6 +3818,7 @@ async fn dispatch_user_message(
                 project_context_pack_enabled: config.project_context_pack_enabled(),
                 locale_tag: app.ui_locale.tag(),
                 translation_enabled: app.translation_enabled,
+                omd_resume_context: None,
             },
         ),
     );

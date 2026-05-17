@@ -110,6 +110,16 @@ impl OmdRuntimeState {
         }
     }
 
+    /// Check if there's an unfinished session at the given workspace.
+    /// Used by Hongjun on startup to suggest resumption.
+    pub fn detect_unfinished_session(workspace: &Path) -> Option<OmdSessionState> {
+        let store = OmdStateStore::new(workspace);
+        match store.read_state() {
+            Ok(Some(state)) if state.phase != "Done" => Some(state),
+            _ => None,
+        }
+    }
+
     /// Handle omd_checkpoint
     pub fn handle_checkpoint(&self, summary: &str) -> Value {
         let _ = self.store.append_event(

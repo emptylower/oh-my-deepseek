@@ -28,6 +28,8 @@ pub struct PromptSessionContext<'a> {
     /// to the system prompt instructing the model to respond in
     /// the resolved session locale.
     pub translation_enabled: bool,
+    /// OMD session resumption context (injected by Hongjun on startup)
+    pub omd_resume_context: Option<&'a str>,
 }
 
 /// Conventional location for the structured session relay artifact (#32).
@@ -557,6 +559,7 @@ pub fn system_prompt_for_mode_with_context_and_skills(
             project_context_pack_enabled: true,
             locale_tag: "en",
             translation_enabled: false,
+            omd_resume_context: None,
         },
     )
 }
@@ -734,6 +737,11 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         full_prompt = format!("{full_prompt}\n\n{handoff_block}");
     }
 
+    // 7b. OMD session resumption context (Hongjun only).
+    if let Some(resume_ctx) = session_context.omd_resume_context {
+        full_prompt.push_str(resume_ctx);
+    }
+
     // 7. Locale-native closing reinforcement (#1118 follow-up #2). The
     // opening preamble alone wasn't enough — community feedback (the
     // WeChat thread about XML-tagged bilingual bookends) flagged that as
@@ -889,6 +897,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "zh-Hans",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
             ApprovalMode::Suggest,
         ) {
@@ -958,6 +967,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "zh-Hans",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
             ApprovalMode::Suggest,
         ) {
@@ -1002,6 +1012,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
             ApprovalMode::Suggest,
         ) {
@@ -1091,6 +1102,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "ja",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1126,6 +1138,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1153,6 +1166,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1182,6 +1196,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1209,6 +1224,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1403,6 +1419,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1436,6 +1453,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                omd_resume_context: None,
             },
         ) {
             SystemPrompt::Text(text) => text,
