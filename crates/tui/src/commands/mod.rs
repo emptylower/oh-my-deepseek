@@ -30,6 +30,7 @@ mod skills;
 mod stash;
 mod status;
 mod task;
+mod omd;
 mod user_commands;
 
 use std::fmt::Write as _;
@@ -526,6 +527,19 @@ pub const COMMANDS: &[CommandInfo] = &[
         usage: "/cache [count|inspect|warmup]",
         description_id: MessageId::CmdCacheDescription,
     },
+    // OMD commands
+    CommandInfo {
+        name: "omd-execute",
+        aliases: &["omd-exec"],
+        usage: "/omd-execute [plan-path]",
+        description_id: MessageId::CmdOmdExecuteDescription,
+    },
+    CommandInfo {
+        name: "omd-phase-complete",
+        aliases: &["omd-phase"],
+        usage: "/omd-phase-complete [target-phase]",
+        description_id: MessageId::CmdOmdPhaseCompleteDescription,
+    },
 ];
 
 /// Execute a slash command
@@ -638,6 +652,10 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
 
         // RLM command
         "rlm" | "recursive" | "digui" => rlm(app, arg),
+
+        // OMD commands
+        "omd-execute" | "omd-exec" => omd::omd_execute(app, arg),
+        "omd-phase-complete" | "omd-phase" => omd::omd_phase_complete(app, arg),
 
         // Legacy command migrations (kept out of registry/autocomplete intentionally).
         "set" => CommandResult::error(

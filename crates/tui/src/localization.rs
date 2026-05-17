@@ -322,6 +322,8 @@ pub enum MessageId {
     CmdCacheNoData,
     CmdCacheTotals,
     CmdCostReport,
+    CmdOmdExecuteDescription,
+    CmdOmdPhaseCompleteDescription,
     CmdTokensCacheBoth,
     CmdTokensCacheHitOnly,
     CmdTokensCacheMissOnly,
@@ -558,6 +560,8 @@ pub const ALL_MESSAGE_IDS: &[MessageId] = &[
     MessageId::CmdChangeTranslationUnavailable,
     MessageId::CmdChangePreviousVersion,
     MessageId::CmdCostReport,
+    MessageId::CmdOmdExecuteDescription,
+    MessageId::CmdOmdPhaseCompleteDescription,
     MessageId::CmdTokensCacheBoth,
     MessageId::CmdTokensCacheHitOnly,
     MessageId::CmdTokensCacheMissOnly,
@@ -1028,6 +1032,8 @@ fn english(id: MessageId) -> &'static str {
              ─────────────────────────────\n\
              Pricing details are not configured in this CLI."
         }
+        MessageId::CmdOmdExecuteDescription => "Switch to Pangu conductor mode with an optional plan",
+        MessageId::CmdOmdPhaseCompleteDescription => "Escape hatch for stalled OMD phases",
         MessageId::CmdTokensCacheBoth => "{hit} hit / {miss} miss",
         MessageId::CmdTokensCacheHitOnly => "{hit} hit / miss not reported",
         MessageId::CmdTokensCacheMissOnly => "hit not reported / {miss} miss",
@@ -1410,6 +1416,8 @@ fn japanese(id: MessageId) -> Option<&'static str> {
              ─────────────────────────────\n\
              本 CLI には詳細な料金表は組み込まれていません。"
         }
+        MessageId::CmdOmdExecuteDescription => "Switch to Pangu conductor mode with an optional plan",
+        MessageId::CmdOmdPhaseCompleteDescription => "Escape hatch for stalled OMD phases",
         MessageId::CmdTokensCacheBoth => "ヒット {hit} / ミス {miss}",
         MessageId::CmdTokensCacheHitOnly => "ヒット {hit} / ミスは未報告",
         MessageId::CmdTokensCacheMissOnly => "ヒットは未報告 / ミス {miss}",
@@ -1740,6 +1748,8 @@ fn chinese_simplified(id: MessageId) -> Option<&'static str> {
              ─────────────────────────────\n\
              此 CLI 中未配置详细计费规则。"
         }
+        MessageId::CmdOmdExecuteDescription => "Switch to Pangu conductor mode with an optional plan",
+        MessageId::CmdOmdPhaseCompleteDescription => "Escape hatch for stalled OMD phases",
         MessageId::CmdTokensCacheBoth => "命中 {hit} / 未命中 {miss}",
         MessageId::CmdTokensCacheHitOnly => "命中 {hit} / 未命中未上报",
         MessageId::CmdTokensCacheMissOnly => "命中未上报 / 未命中 {miss}",
@@ -2086,6 +2096,8 @@ fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
              ─────────────────────────────\n\
              Os detalhes de preço não estão configurados nesta CLI."
         }
+        MessageId::CmdOmdExecuteDescription => "Switch to Pangu conductor mode with an optional plan",
+        MessageId::CmdOmdPhaseCompleteDescription => "Escape hatch for stalled OMD phases",
         MessageId::CmdTokensCacheBoth => "{hit} hit / {miss} miss",
         MessageId::CmdTokensCacheHitOnly => "{hit} hit / miss não reportado",
         MessageId::CmdTokensCacheMissOnly => "hit não reportado / {miss} miss",
@@ -2476,6 +2488,8 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
              ─────────────────────────────\n\
              Los detalles de precio no están configurados en esta CLI."
         }
+        MessageId::CmdOmdExecuteDescription => "Switch to Pangu conductor mode with an optional plan",
+        MessageId::CmdOmdPhaseCompleteDescription => "Escape hatch for stalled OMD phases",
         MessageId::CmdTokensCacheBoth => "{hit} hit / {miss} miss",
         MessageId::CmdTokensCacheHitOnly => "{hit} hit / miss no reportado",
         MessageId::CmdTokensCacheMissOnly => "hit no reportado / {miss} miss",
