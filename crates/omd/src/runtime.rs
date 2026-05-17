@@ -166,6 +166,22 @@ impl OmdRuntimeState {
                     &self.session_state,
                     &json!({"ts": Utc::now().to_rfc3339(), "event": "phase_transition", "from": from, "to": to, "reason": reason, "evidence": evidence}),
                 );
+                // Fuxi handoff event: emit when Fuxi finishes planning (Plan→Done)
+                if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
+                    let plan_path = evidence.iter()
+                        .filter_map(|e| e.get("path").and_then(|p| p.as_str()))
+                        .next()
+                        .unwrap_or(".omd/plans/latest.md");
+                    let _ = self.store.append_event(
+                        &self.session_state.session_id,
+                        &json!({
+                            "ts": Utc::now().to_rfc3339(),
+                            "event": "fuxi_handoff",
+                            "plan_path": plan_path,
+                            "message": "Plan ready. Use /omd-execute to start Pangu, or Tab to choose agent.",
+                        }),
+                    );
+                }
                 // Clear audit log on phase transition (evidence is phase-scoped)
                 self.audit_log.clear();
                 json!({"ok": true, "phase": to, "message": format!("Transitioned from {} to {}. Tool availability updated.", from, to), "tools_changed": true})
