@@ -39,9 +39,9 @@ impl Engine {
         todo_list: SharedTodoList,
         plan_state: SharedPlanState,
     ) -> ToolRegistryBuilder {
-        // OmdTongtian restricted phases: return exact registry immediately.
+        // OMD restricted phases: return exact registry immediately.
         // The model sees ONLY phase-allowed tools — no common tools appended.
-        if mode == AppMode::OmdTongtian {
+        if matches!(mode, AppMode::OmdTongtian | AppMode::OmdFuxi | AppMode::OmdPangu | AppMode::OmdHongjun) {
             if let Some(ref omd_rt) = self.omd_runtime {
                 let phase = {
                     let state = tokio::task::block_in_place(|| omd_rt.blocking_read());
@@ -61,15 +61,49 @@ impl Engine {
                     if policy.is_allowed("exec_shell") {
                         b = b.with_shell_tools();
                     }
+                    if policy.is_allowed("omd_delegate") {
+                        // Pangu's Delegate/Verify phases get delegation tools
+                        if let Some(client) = self.deepseek_client.clone() {
+                            let tool_ctx = ToolContext::new(self.session.workspace.clone());
+                            let sa_runtime = SubAgentRuntime::new(
+                                client,
+                                self.session.model.clone(),
+                                tool_ctx,
+                                self.session.allow_shell,
+                                Some(self.tx_event.clone()),
+                                Arc::clone(&self.subagent_manager),
+                            )
+                            .with_max_spawn_depth(0);
+
+                            b = b
+                                .with_tool(Arc::new(
+                                    crate::tools::omd_delegate::OmdDelegateTool::new(
+                                        omd_rt.clone(),
+                                        self.subagent_manager.clone(),
+                                        sa_runtime,
+                                    ),
+                                ))
+                                .with_tool(Arc::new(
+                                    crate::tools::subagent::AgentEvalTool::new(
+                                        self.subagent_manager.clone(),
+                                    ),
+                                ))
+                                .with_tool(Arc::new(
+                                    crate::tools::subagent::AgentCloseTool::new(
+                                        self.subagent_manager.clone(),
+                                    ),
+                                ));
+                        }
+                    }
                     return b;
                 }
                 // Execute phase (is_allow_all): fall through to get full tooling + common tools.
             }
         }
 
-        // OmdTongtian-Execute, Agent, Yolo, Plan: standard registry construction.
-        let mut builder = if mode == AppMode::OmdTongtian {
-            // Must be Execute phase (restricted returned above).
+        // OMD-Execute, Agent, Yolo, Plan: standard registry construction.
+        let mut builder = if matches!(mode, AppMode::OmdTongtian | AppMode::OmdFuxi | AppMode::OmdPangu | AppMode::OmdHongjun) {
+            // Must be Execute/allow_all phase (restricted returned above).
             let omd_rt = self.omd_runtime.as_ref().unwrap();
             ToolRegistryBuilder::new()
                 .with_tool(Arc::new(crate::tools::omd::OmdPhaseCompleteTool::new(omd_rt.clone())))

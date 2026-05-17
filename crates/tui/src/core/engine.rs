@@ -980,12 +980,26 @@ impl Engine {
             approval_mode
         };
 
-        // Initialize OMD runtime on first OmdTongtian turn
-        if mode == AppMode::OmdTongtian && self.omd_runtime.is_none() {
-            self.omd_runtime = Some(omd::OmdRuntimeState::shared(
-                omd::OmdAgent::Tongtian,
-                &self.session.workspace,
-            ));
+        // Initialize OMD runtime for any OMD mode, reinitialize if switching agents
+        let requested_agent = match mode {
+            AppMode::OmdTongtian => Some(omd::OmdAgent::Tongtian),
+            AppMode::OmdFuxi => Some(omd::OmdAgent::Fuxi),
+            AppMode::OmdPangu => Some(omd::OmdAgent::Pangu),
+            AppMode::OmdHongjun => Some(omd::OmdAgent::Hongjun),
+            _ => None,
+        };
+        if let Some(agent) = requested_agent {
+            let needs_init = match &self.omd_runtime {
+                None => true,
+                Some(rt) => {
+                    let state = tokio::task::block_in_place(|| rt.blocking_read());
+                    state.fsm.agent() != agent
+                }
+            };
+            if needs_init {
+                self.omd_runtime =
+                    Some(omd::OmdRuntimeState::shared(agent, &self.session.workspace));
+            }
         }
 
         // Update system prompt to match current mode and include persisted compaction context.

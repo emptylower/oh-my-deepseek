@@ -723,6 +723,10 @@ pub(crate) fn footer_mode_style(app: &App) -> (&'static str, ratatui::style::Col
         crate::tui::app::AppMode::Agent => app.ui_theme.mode_agent,
         crate::tui::app::AppMode::Yolo => app.ui_theme.mode_yolo,
         crate::tui::app::AppMode::Plan => app.ui_theme.mode_plan,
+        crate::tui::app::AppMode::OmdTongtian
+        | crate::tui::app::AppMode::OmdFuxi
+        | crate::tui::app::AppMode::OmdPangu
+        | crate::tui::app::AppMode::OmdHongjun => app.ui_theme.mode_agent,
     };
     (label, color)
 }

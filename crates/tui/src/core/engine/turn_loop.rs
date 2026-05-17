@@ -1065,7 +1065,7 @@ impl Engine {
             };
 
             // Snapshot OMD phase for per-call guard (once per batch)
-            let omd_phase_snapshot = if mode == AppMode::OmdTongtian {
+            let omd_phase_snapshot = if matches!(mode, AppMode::OmdTongtian | AppMode::OmdFuxi | AppMode::OmdPangu | AppMode::OmdHongjun) {
                 self.omd_runtime.as_ref().map(|rt| {
                     let state = tokio::task::block_in_place(|| rt.blocking_read());
                     *state.fsm.phase()
