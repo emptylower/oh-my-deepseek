@@ -178,6 +178,14 @@ struct Cli {
     /// Skip loading project-level config from $WORKSPACE/.deepseek/config.toml
     #[arg(long = "no-project-config")]
     no_project_config: bool,
+
+    /// Run the OMD update script (pull latest source and rebuild)
+    #[arg(long = "omd-update", hide = true)]
+    omd_update: bool,
+
+    /// Run the OMD uninstall script
+    #[arg(long = "omd-uninstall", hide = true)]
+    omd_uninstall: bool,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -730,6 +738,44 @@ async fn main() -> Result<()> {
     dotenv().ok();
     let cli = Cli::parse();
     logging::set_verbose(cli.verbose || logging::env_requests_verbose_logging());
+
+    if cli.omd_update {
+        let install_script = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".deepseek-omd/source/scripts/omd-install.sh");
+        if install_script.exists() {
+            let status = std::process::Command::new("bash")
+                .arg(&install_script)
+                .status()
+                .expect("Failed to run install script");
+            std::process::exit(status.code().unwrap_or(1));
+        } else {
+            eprintln!(
+                "Install script not found at {}. Run the install script manually.",
+                install_script.display()
+            );
+            std::process::exit(1);
+        }
+    }
+
+    if cli.omd_uninstall {
+        let uninstall_script = dirs::home_dir()
+            .unwrap_or_default()
+            .join(".deepseek-omd/source/scripts/omd-uninstall.sh");
+        if uninstall_script.exists() {
+            let status = std::process::Command::new("bash")
+                .arg(&uninstall_script)
+                .status()
+                .expect("Failed to run uninstall script");
+            std::process::exit(status.code().unwrap_or(1));
+        } else {
+            eprintln!(
+                "Uninstall script not found at {}. Remove ~/.local/bin/deepseek-omd manually.",
+                uninstall_script.display()
+            );
+            std::process::exit(1);
+        }
+    }
 
     // Handle subcommands first
     if let Some(command) = cli.command.clone() {
