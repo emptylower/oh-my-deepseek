@@ -8,6 +8,7 @@ members = [
     "crates/execpolicy",
     "crates/hooks",
     "crates/mcp",
+    "crates/omd",
     "crates/protocol",
     "crates/secrets",
     "crates/state",

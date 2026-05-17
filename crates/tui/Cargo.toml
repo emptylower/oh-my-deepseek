@@ -19,6 +19,7 @@ name = "deepseek-tui"
 path = "src/main.rs"
 
 [dependencies]
+omd = { path = "../omd" }
 anyhow = "1.0.100"
 arboard = "3.4"
 deepseek-secrets = { path = "../secrets", version = "0.8.36" }
