@@ -1,0 +1,179 @@
+//! omd_delegate — Pangu's delegation tool.
+//!
+//! Wraps TUI's internal `AgentSpawnTool` with OMD policy injection.
+//! Returns the session handle immediately — Pangu calls `agent_eval`
+//! separately to poll/wait for worker completion.
+
+use async_trait::async_trait;
+use omd::{SharedOmdRuntime, WorkerRegistry};
+use serde_json::{json, Value};
+
+use super::spec::{ApprovalRequirement, ToolCapability, ToolContext, ToolError, ToolResult, ToolSpec};
+use super::subagent::{AgentSpawnTool, SharedSubAgentManager, SubAgentRuntime};
+
+pub struct OmdDelegateTool {
+    runtime: SharedOmdRuntime,
+    manager: SharedSubAgentManager,
+    subagent_runtime: SubAgentRuntime,
+}
+
+impl OmdDelegateTool {
+    pub fn new(
+        runtime: SharedOmdRuntime,
+        manager: SharedSubAgentManager,
+        subagent_runtime: SubAgentRuntime,
+    ) -> Self {
+        Self { runtime, manager, subagent_runtime }
+    }
+}
+
+#[async_trait]
+impl ToolSpec for OmdDelegateTool {
+    fn name(&self) -> &str { "omd_delegate" }
+
+    fn description(&self) -> &str {
+        "Delegate a bounded task to a worker agent. Returns the session handle immediately — \
+         use `agent_eval` to poll/wait for the worker's result. Only available to Pangu in \
+         Delegate/Verify phases. Workers have restricted tool access and cannot re-delegate."
+    }
+
+    fn input_schema(&self) -> Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "agent": {
+                    "type": "string",
+                    "description": "Worker agent ID: tongtian-junior, kunpeng, nuwa, shennong, yangmei, cangjie, zhurong"
+                },
+                "task": {
+                    "type": "string",
+                    "description": "Specific bounded task description for the worker"
+                },
+                "context": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Relevant file paths or context to pass to the worker"
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["implementation", "test", "explore", "debug"],
+                    "description": "Task category for tracking"
+                },
+                "task_id": {
+                    "type": "string",
+                    "description": "Task graph ID for tracking (matches TaskGraph task IDs)"
+                },
+                "write_scope": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Allowed file paths/globs the worker may write to"
+                }
+            },
+            "required": ["agent", "task"]
+        })
+    }
+
+    fn capabilities(&self) -> Vec<ToolCapability> {
+        vec![ToolCapability::ExecutesCode]
+    }
+
+    fn approval_requirement(&self) -> ApprovalRequirement {
+        ApprovalRequirement::Auto
+    }
+
+    async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
+        let agent_id = input.get("agent").and_then(|v| v.as_str()).unwrap_or("");
+        let task = input.get("task").and_then(|v| v.as_str()).unwrap_or("");
+        let ctx_paths: Vec<String> = input.get("context")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+        let category = input.get("category").and_then(|v| v.as_str()).map(String::from);
+        let task_id = input.get("task_id").and_then(|v| v.as_str()).map(String::from);
+        let write_scope: Vec<String> = input.get("write_scope")
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+            .unwrap_or_default();
+
+        // Validate worker exists
+        let registry = WorkerRegistry::new();
+        let worker = registry.get(agent_id).ok_or_else(|| {
+            ToolError::invalid_input(format!(
+                "Unknown worker '{}'. Available: {:?}",
+                agent_id,
+                registry.all().iter().map(|w| w.id).collect::<Vec<_>>()
+            ))
+        })?;
+
+        // In Pangu Verify phase, only nuwa is allowed
+        {
+            let state = self.runtime.read().await;
+            let phase_name = state.fsm.current_phase_name();
+            if phase_name == "Verify" && agent_id != "nuwa" {
+                return Err(ToolError::permission_denied(format!(
+                    "In Verify phase, only 'nuwa' can be delegated to (got '{}')", agent_id
+                )));
+            }
+        }
+
+        // Build prompt with role context
+        let context_section = if ctx_paths.is_empty() {
+            String::new()
+        } else {
+            format!("\n\nRelevant files:\n{}", ctx_paths.iter().map(|p| format!("- {p}")).collect::<Vec<_>>().join("\n"))
+        };
+
+        let scope_section = if write_scope.is_empty() {
+            String::new()
+        } else {
+            format!("\n\nAllowed write scope:\n{}", write_scope.iter().map(|p| format!("- {p}")).collect::<Vec<_>>().join("\n"))
+        };
+
+        let full_prompt = format!(
+            "{}\n\n## Task\n\n{}{}{}",
+            worker.system_prompt_prefix, task, context_section, scope_section
+        );
+
+        // Spawn via native agent_spawn with custom type + explicit allowed_tools.
+        let session_name = format!("omd-{}-{}", agent_id, chrono::Utc::now().timestamp());
+        let spawn_input = json!({
+            "prompt": full_prompt,
+            "type": "custom",
+            "allowed_tools": worker.allowed_tools,
+            "name": session_name,
+            "fork_context": false,
+        });
+
+        let spawn_tool = AgentSpawnTool::new(self.manager.clone(), self.subagent_runtime.clone());
+        let result = spawn_tool.execute(spawn_input, context).await?;
+
+        // Log delegation event
+        {
+            let state = self.runtime.read().await;
+            let _ = state.store.append_event(
+                &state.session_state.session_id,
+                &json!({
+                    "ts": chrono::Utc::now().to_rfc3339(),
+                    "event": "delegate",
+                    "agent": agent_id,
+                    "task": task,
+                    "task_id": task_id,
+                    "category": category,
+                    "write_scope": write_scope,
+                    "context": ctx_paths,
+                    "session_name": session_name,
+                }),
+            );
+        }
+
+        // Return enriched result with session name for agent_eval
+        Ok(ToolResult {
+            success: true,
+            content: format!(
+                "Spawned worker {} (session: {}). Use `agent_eval` with session name '{}' to wait for results.",
+                worker.display_name, session_name, session_name
+            ),
+            metadata: result.metadata,
+        })
+    }
+}
