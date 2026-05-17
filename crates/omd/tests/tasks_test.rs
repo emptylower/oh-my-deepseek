@@ -31,8 +31,9 @@ fn dependency_blocks_task() {
     // Only T1 is runnable (T2 blocked by T1)
     assert_eq!(graph.next_runnable(), Some("T1".to_string()));
 
-    // Complete T1
-    graph.set_status("T1", TaskStatus::Done);
+    // Complete T1 (must go Pending → Active → Done)
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Done).unwrap();
 
     // Now T2 is runnable
     assert_eq!(graph.next_runnable(), Some("T2".to_string()));
@@ -42,7 +43,9 @@ fn dependency_blocks_task() {
 fn all_done_returns_true() {
     let mut graph = TaskGraph::new();
     graph.add_task(Task::new("T1", "First"));
-    graph.set_status("T1", TaskStatus::Done);
+    graph.validate().unwrap();
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Done).unwrap();
     assert!(graph.all_done());
 }
 
@@ -52,8 +55,11 @@ fn progress_summary() {
     graph.add_task(Task::new("T1", "A"));
     graph.add_task(Task::new("T2", "B"));
     graph.add_task(Task::new("T3", "C"));
-    graph.set_status("T1", TaskStatus::Done);
-    graph.set_status("T2", TaskStatus::Active);
+    graph.validate().unwrap();
+
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Done).unwrap();
+    graph.set_status("T2", TaskStatus::Active).unwrap();
 
     let (done, total) = graph.progress();
     assert_eq!(done, 1);
@@ -115,4 +121,91 @@ fn task_category_field() {
 
     let json = serde_json::to_value(&task).unwrap();
     assert_eq!(json["category"], "implementation");
+}
+
+#[test]
+fn valid_status_transitions() {
+    use omd::tasks::is_valid_transition;
+    assert!(is_valid_transition(&TaskStatus::Pending, &TaskStatus::Active));
+    assert!(is_valid_transition(&TaskStatus::Active, &TaskStatus::Done));
+    assert!(is_valid_transition(&TaskStatus::Active, &TaskStatus::Failed));
+    assert!(is_valid_transition(&TaskStatus::Failed, &TaskStatus::Active));
+    assert!(is_valid_transition(&TaskStatus::Pending, &TaskStatus::Skipped));
+}
+
+#[test]
+fn invalid_status_transitions() {
+    use omd::tasks::is_valid_transition;
+    assert!(!is_valid_transition(&TaskStatus::Done, &TaskStatus::Active));
+    assert!(!is_valid_transition(&TaskStatus::Pending, &TaskStatus::Done));
+    assert!(!is_valid_transition(&TaskStatus::Skipped, &TaskStatus::Active));
+}
+
+#[test]
+fn auto_blocked_and_unblocked() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(Task::new("T1", "First"));
+    let mut t2 = Task::new("T2", "Second");
+    t2.depends_on = vec!["T1".to_string()];
+    graph.add_task(t2);
+    graph.validate().unwrap();
+
+    assert_eq!(graph.next_runnable(), Some("T1".to_string()));
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Done).unwrap();
+    assert_eq!(graph.next_runnable(), Some("T2".to_string()));
+}
+
+#[test]
+fn retry_increments_attempts() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(Task::new("T1", "Flaky"));
+    graph.validate().unwrap();
+
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Failed).unwrap();
+    let t = graph.get("T1").unwrap();
+    assert_eq!(t.attempts, 1);
+
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    graph.set_status("T1", TaskStatus::Failed).unwrap();
+    let t = graph.get("T1").unwrap();
+    assert_eq!(t.attempts, 2);
+}
+
+#[test]
+fn invalid_transition_returns_error() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(Task::new("T1", "Test"));
+    graph.validate().unwrap();
+
+    let result = graph.set_status("T1", TaskStatus::Done);
+    assert!(result.is_err());
+}
+
+#[test]
+fn max_one_active_task() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(Task::new("T1", "First"));
+    graph.add_task(Task::new("T2", "Second"));
+    graph.validate().unwrap();
+
+    graph.set_status("T1", TaskStatus::Active).unwrap();
+    let result = graph.set_status("T2", TaskStatus::Active);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().contains("max 1 active task"));
+}
+
+#[test]
+fn max_attempts_permanently_fails() {
+    let mut graph = TaskGraph::new();
+    graph.add_task(Task::new("T1", "Flaky"));
+    graph.validate().unwrap();
+
+    for _ in 0..3 {
+        graph.set_status("T1", TaskStatus::Active).unwrap();
+        let _ = graph.set_status("T1", TaskStatus::Failed);
+    }
+    let result = graph.set_status("T1", TaskStatus::Active);
+    assert!(result.is_err());
 }

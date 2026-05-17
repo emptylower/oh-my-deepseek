@@ -66,7 +66,9 @@ impl OmdRuntimeState {
         evidence: Option<Value>,
     ) -> Value {
         if let Some(ref mut graph) = self.task_graph {
-            graph.set_status(task_id, status);
+            if let Err(e) = graph.set_status(task_id, status) {
+                return json!({"ok": false, "error": e});
+            }
             if let Some(task) = graph.get_mut(task_id) {
                 task.changed_files = changed_files;
                 if let Some(ev) = evidence {

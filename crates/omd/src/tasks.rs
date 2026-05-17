@@ -49,6 +49,18 @@ impl Task {
     }
 }
 
+pub fn is_valid_transition(from: &TaskStatus, to: &TaskStatus) -> bool {
+    matches!(
+        (from, to),
+        (TaskStatus::Pending, TaskStatus::Active)
+            | (TaskStatus::Pending, TaskStatus::Skipped)
+            | (TaskStatus::Active, TaskStatus::Done)
+            | (TaskStatus::Active, TaskStatus::Failed)
+            | (TaskStatus::Failed, TaskStatus::Active) // retry
+            | (TaskStatus::Blocked, TaskStatus::Pending) // auto-unblock
+    )
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TaskGraph {
     pub tasks: Vec<Task>,
@@ -133,10 +145,42 @@ impl TaskGraph {
         self.tasks.iter_mut().find(|t| t.id == id)
     }
 
-    pub fn set_status(&mut self, id: &str, status: TaskStatus) {
-        if let Some(task) = self.get_mut(id) {
-            task.status = status;
+    pub fn set_status(&mut self, id: &str, status: TaskStatus) -> Result<(), String> {
+        // Enforce max 1 active task at a time
+        if status == TaskStatus::Active {
+            let active_count = self.tasks.iter()
+                .filter(|t| t.status == TaskStatus::Active && t.id != id)
+                .count();
+            if active_count >= 1 {
+                return Err(format!("Cannot activate '{}': max 1 active task at a time", id));
+            }
         }
+
+        let task = self.get_mut(id)
+            .ok_or_else(|| format!("Task '{}' not found", id))?;
+
+        // Reject retry if attempts exhausted
+        if task.status == TaskStatus::Failed && status == TaskStatus::Active {
+            if task.attempts >= task.max_attempts {
+                return Err(format!("Task '{}' exhausted {} retries", id, task.max_attempts));
+            }
+        }
+
+        // Validate transition
+        if !is_valid_transition(&task.status, &status) {
+            return Err(format!(
+                "Invalid transition for '{}': {:?} → {:?}",
+                id, task.status, status
+            ));
+        }
+
+        // Track retry attempts
+        if task.status == TaskStatus::Active && status == TaskStatus::Failed {
+            task.attempts += 1;
+        }
+
+        task.status = status;
+        Ok(())
     }
 
     /// Returns the ID of the next task that can run (Pending + all deps Done).
