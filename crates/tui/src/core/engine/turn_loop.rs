@@ -1881,6 +1881,23 @@ impl Engine {
                         // untouched, so polling for diagnostics would just
                         // surface stale state.
                         if output.success && tool_was_executed {
+                            // OMD audit log: record exec_shell commands for evidence verification
+                            if matches!(mode, AppMode::OmdTongtian | AppMode::OmdFuxi | AppMode::OmdPangu | AppMode::OmdHongjun)
+                                && matches!(outcome.name.as_str(), "exec_shell" | "exec_shell_wait")
+                            {
+                                if let Some(ref omd_rt) = self.omd_runtime {
+                                    let cmd = tool_input.get("command").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                                    let exit_code = output.metadata.as_ref()
+                                        .and_then(|m| m.get("exit_code"))
+                                        .and_then(|v| v.as_i64())
+                                        .unwrap_or(0) as i32;
+                                    // Use try_write to avoid blocking — if lock is held, skip this entry
+                                    if let Ok(mut rt) = omd_rt.try_write() {
+                                        rt.push_audit_entry(cmd, exit_code);
+                                    }
+                                }
+                            }
+
                             self.run_post_edit_lsp_hook(&outcome.name, &tool_input)
                                 .await;
                         }

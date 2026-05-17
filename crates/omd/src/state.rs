@@ -58,6 +58,12 @@ impl OmdStateStore {
         Self { base_dir }
     }
 
+    /// Return the workspace root (parent of .omd/sessions/).
+    pub fn workspace(&self) -> &Path {
+        // base_dir is workspace/.omd/sessions/
+        self.base_dir.parent().and_then(|p| p.parent()).unwrap_or(Path::new("."))
+    }
+
     /// Ensure directories exist
     pub fn ensure_dirs(&self, session_id: &str) -> std::io::Result<()> {
         fs::create_dir_all(&self.base_dir)?;

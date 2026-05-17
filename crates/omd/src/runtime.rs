@@ -18,6 +18,9 @@ pub struct OmdRuntimeState {
     pub session_state: OmdSessionState,
     pub store: OmdStateStore,
     pub task_graph: Option<TaskGraph>,
+    /// Shell commands executed in current phase (for evidence verification).
+    /// Cleared on each successful phase transition.
+    pub audit_log: Vec<(String, i32)>,
 }
 
 impl OmdRuntimeState {
@@ -31,12 +34,17 @@ impl OmdRuntimeState {
             &session_state.session_id,
             &json!({"ts": Utc::now().to_rfc3339(), "event": "session_start", "agent": format!("{:?}", agent), "phase": session_state.phase}),
         );
-        Self { fsm, session_state, store, task_graph: None }
+        Self { fsm, session_state, store, task_graph: None, audit_log: Vec::new() }
     }
 
     /// Create a SharedOmdRuntime (the type tools will hold)
     pub fn shared(agent: OmdAgent, workspace: &Path) -> SharedOmdRuntime {
         Arc::new(RwLock::new(Self::new(agent, workspace)))
+    }
+
+    /// Record a shell command execution for evidence verification.
+    pub fn push_audit_entry(&mut self, command: String, exit_code: i32) {
+        self.audit_log.push((command, exit_code));
     }
 
     /// Sync task_graph into session_state and persist to disk.
@@ -106,6 +114,8 @@ impl OmdRuntimeState {
                     &self.session_state.session_id,
                     &json!({"ts": Utc::now().to_rfc3339(), "event": "phase_transition", "from": from, "to": to, "reason": reason, "evidence": evidence}),
                 );
+                // Clear audit log on phase transition (evidence is phase-scoped)
+                self.audit_log.clear();
                 json!({"ok": true, "phase": to, "message": format!("Transitioned from {} to {}. Tool availability updated.", from, to), "tools_changed": true})
             }
             Err(e) => json!({"ok": false, "error": e, "current_phase": from, "valid_next_phases": self.fsm.valid_next_phases()}),

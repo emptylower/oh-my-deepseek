@@ -56,6 +56,36 @@ impl ToolSpec for OmdPhaseCompleteTool {
         let reason = input.get("reason").and_then(|v| v.as_str()).unwrap_or("");
         let evidence = input.get("evidence").and_then(|v| v.as_array()).cloned().unwrap_or_default();
 
+        // Verify evidence claims BEFORE accepting transition
+        if !evidence.is_empty() {
+            let state = self.runtime.read().await;
+            let workspace = state.store.workspace();
+            let audit_log = &state.audit_log;
+
+            for ev_value in &evidence {
+                // Try to parse as EvidenceClaim
+                if let Ok(claim) = serde_json::from_value::<omd::EvidenceClaim>(ev_value.clone()) {
+                    match omd::verify_claim(&claim, workspace, audit_log) {
+                        Ok(omd::VerificationResult::Verified { .. }) => {},
+                        Ok(omd::VerificationResult::RequiresUserAck { reason, .. }) => {
+                            return Err(ToolError::execution_failed(format!(
+                                "Evidence requires user acknowledgment before phase transition: {}. \
+                                 Confirm via /omd-phase-complete.",
+                                reason
+                            )));
+                        },
+                        Err(reason) => {
+                            return Err(ToolError::execution_failed(
+                                format!("Evidence verification failed: {}", reason)
+                            ));
+                        }
+                    }
+                }
+                // If it doesn't parse as EvidenceClaim, skip it (legacy format)
+            }
+            drop(state); // Release read lock before acquiring write lock
+        }
+
         let mut state = self.runtime.write().await;
         let result = state.handle_phase_complete(next_phase, reason, &evidence);
 
