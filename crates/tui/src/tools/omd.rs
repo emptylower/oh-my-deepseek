@@ -93,6 +93,29 @@ impl ToolSpec for OmdPhaseCompleteTool {
             drop(state); // Release read lock before acquiring write lock
         }
 
+        // Check transition-specific evidence requirements
+        {
+            let state = self.runtime.read().await;
+            let current_phase = state.fsm.phase().clone();
+            // Extract evidence type names from the evidence array
+            let evidence_types: Vec<&str> = evidence.iter()
+                .filter_map(|ev| ev.get("type").and_then(|t| t.as_str()))
+                .collect();
+            if let Err(missing) = omd::check_evidence_requirements(&current_phase, next_phase, &evidence_types) {
+                let missing_names: Vec<&str> = missing.iter().map(|r| match r {
+                    omd::RequiredEvidence::FileDiscovery => "FileDiscovery",
+                    omd::RequiredEvidence::TestResult => "TestResult",
+                    omd::RequiredEvidence::GitDiff => "GitDiff",
+                    omd::RequiredEvidence::PlanArtifact => "PlanArtifact",
+                }).collect();
+                return Err(ToolError::execution_failed(format!(
+                    "Transition from '{}' to '{}' requires evidence of type(s): {:?}. \
+                     Provide the required evidence or use ExplicitSkip (requires user ack).",
+                    current_phase.name(), next_phase, missing_names
+                )));
+            }
+        }
+
         let mut state = self.runtime.write().await;
         let result = state.handle_phase_complete(next_phase, reason, &evidence);
 

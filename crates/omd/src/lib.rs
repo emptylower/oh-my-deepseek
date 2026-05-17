@@ -9,6 +9,7 @@ pub mod tasks;
 pub mod scope;
 pub mod shell_policy;
 pub mod evidence;
+pub mod transition_guards;
 
 pub use runtime::{OmdRuntimeState, SharedOmdRuntime};
 pub use types::{OmdAgent, OmdPhase, TongtianPhase, FuxiPhase, PanguPhase, HongjunPhase};
@@ -18,3 +19,4 @@ pub use tasks::{TaskGraph, Task, TaskStatus};
 pub use scope::WriteScopeValidator;
 pub use shell_policy::{ShellPolicy, validate_command};
 pub use evidence::{EvidenceClaim, VerifiedEvidence, VerificationResult, verify_claim};
+pub use transition_guards::{RequiredEvidence, required_evidence_for, check_evidence_requirements};
