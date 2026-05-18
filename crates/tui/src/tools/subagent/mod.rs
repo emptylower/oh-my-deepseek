@@ -4437,8 +4437,8 @@ impl SubAgentToolRegistry {
                         if !validator.is_allowed(path) {
                             return Err(anyhow!(
                                 "Write blocked: path '{}' is outside the allowed write scope for this task. \
-                                 Allowed patterns: {:?}",
-                                path, scope_patterns
+                                 Allowed patterns: {:?}. NEEDS_SCOPE: {}",
+                                path, scope_patterns, path
                             ));
                         }
                     }
@@ -4490,8 +4490,8 @@ impl SubAgentToolRegistry {
                         if !validator.is_allowed(path) {
                             return Err(anyhow!(
                                 "Write blocked: patch targets '{}' which is outside write scope. \
-                                 Allowed: {:?}",
-                                path, scope_patterns
+                                 Allowed: {:?}. NEEDS_SCOPE: {}",
+                                path, scope_patterns, path
                             ));
                         }
                     }
