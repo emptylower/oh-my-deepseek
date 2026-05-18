@@ -56,7 +56,9 @@ impl ToolSpec for OmdPhaseCompleteTool {
         let reason = input.get("reason").and_then(|v| v.as_str()).unwrap_or("");
         let evidence = input.get("evidence").and_then(|v| v.as_array()).cloned().unwrap_or_default();
 
-        // Verify evidence claims BEFORE accepting transition
+        // Verify evidence claims BEFORE accepting transition.
+        // ExplicitSkip is NOT verified (it's an acknowledgment, not a verifiable claim).
+        // It satisfies transition guards but is logged for audit.
         if !evidence.is_empty() {
             let state = self.runtime.read().await;
             let workspace = state.store.workspace();
@@ -65,6 +67,12 @@ impl ToolSpec for OmdPhaseCompleteTool {
             for ev_value in &evidence {
                 // Try to parse as EvidenceClaim
                 if let Ok(claim) = serde_json::from_value::<omd::EvidenceClaim>(ev_value.clone()) {
+                    // ExplicitSkip bypasses verification — it's the "I don't have
+                    // evidence" acknowledgment. Transition guards accept it, and the
+                    // /omd-phase-complete command is the user-ack path for confirmation.
+                    if matches!(claim, omd::EvidenceClaim::ExplicitSkip { .. }) {
+                        continue;
+                    }
                     match omd::verify_claim(&claim, workspace, audit_log) {
                         Ok(omd::VerificationResult::Verified { .. }) => {},
                         Ok(omd::VerificationResult::RequiresUserAck { reason, .. }) => {

@@ -150,6 +150,14 @@ impl ToolSpec for OmdDelegateTool {
             worker_runtime.omd_write_scope = Some(write_scope.clone());
             // Workers with write_scope get read-only shell (prevents shell-based file writes)
             worker_runtime.omd_shell_read_only = true;
+        } else if worker.can_write_code {
+            // Writable worker without explicit scope — log for audit.
+            // Write-scope is opt-in hardening; workers are still bounded by allowed_tools.
+            tracing::warn!(
+                "omd_delegate: writable worker '{}' spawned without write_scope. \
+                 File-level enforcement disabled for this delegation.",
+                agent_id
+            );
         }
         // Set reasoning effort from worker config
         worker_runtime.reasoning_effort = Some(worker.reasoning_effort.to_string());
