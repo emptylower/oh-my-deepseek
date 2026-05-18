@@ -200,6 +200,22 @@ impl OmdRuntimeState {
     pub fn handle_phase_complete(&mut self, next_phase: &str, reason: &str, evidence: &[Value]) -> Value {
         let from = self.fsm.current_phase_name().to_string();
 
+        // Structural guard: Delegate→Verify requires all delegated tasks returned
+        if self.fsm.current_phase_name() == "Delegate" && next_phase == "Verify" {
+            if let Some(ref graph) = self.task_graph {
+                let active_count = graph.tasks().iter()
+                    .filter(|t| matches!(t.status, crate::tasks::TaskStatus::Active))
+                    .count();
+                if active_count > 0 {
+                    return json!({
+                        "ok": false,
+                        "error": format!("Cannot enter Verify: {} task(s) still Active. All delegated tasks must return before verification.", active_count),
+                        "current_phase": self.fsm.current_phase_name(),
+                    });
+                }
+            }
+        }
+
         match self.fsm.try_transition(next_phase) {
             Ok(()) => {
                 let to = self.fsm.current_phase_name();
@@ -489,6 +505,33 @@ mod tests {
         let result = rt.handle_user_phase_complete("Verify");
         assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
         assert_eq!(rt.fsm.current_phase_name(), "Verify");
+    }
+
+    #[test]
+    fn handle_phase_complete_delegate_to_verify_blocked_while_active_task_exists() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Pangu);
+        // Walk Pangu to Delegate phase
+        rt.handle_user_phase_complete("Decompose");
+        rt.handle_user_phase_complete("Delegate");
+        assert_eq!(rt.fsm.current_phase_name(), "Delegate");
+
+        // Add a task graph with one Active task
+        let mut task = crate::tasks::Task::new("t2", "model work");
+        task.status = crate::tasks::TaskStatus::Active;
+        rt.task_graph = Some({
+            let mut g = crate::tasks::TaskGraph::new();
+            g.add_task(task);
+            g
+        });
+
+        // Model-facing path: handle_phase_complete must also reject Delegate→Verify with active tasks
+        let result = rt.handle_phase_complete("Verify", "all done", &[]);
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(false)));
+        let err = result.get("error").and_then(|e| e.as_str()).unwrap_or("");
+        assert!(err.contains("Cannot enter Verify"), "unexpected error: {}", err);
+        assert!(err.contains("1 task(s) still Active"), "unexpected error: {}", err);
+        // Phase must remain Delegate
+        assert_eq!(rt.fsm.current_phase_name(), "Delegate");
     }
 
     #[test]
