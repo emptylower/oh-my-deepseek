@@ -6,7 +6,7 @@ INSTALL_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${HOME}/.deepseek-omd"
 SOURCE_DIR="${HOME}/.deepseek-omd/source"
 
-REPO_URL="${OMD_REPO_URL:-https://github.com/nicepkg/DeepSeek-TUI.git}"
+REPO_URL="${OMD_REPO_URL:-https://github.com/emptylower/DeepSeek-TUI.git}"
 
 echo "=== OhMyDeepSeek Installer ==="
 echo ""
