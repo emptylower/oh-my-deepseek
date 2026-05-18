@@ -203,8 +203,6 @@ impl OmdRuntimeState {
                 None
             };
 
-            // Now safe to call &mut self methods
-            drop(graph);
             self.persist_state();
 
             let mut result = json!({"ok": true, "progress": format!("{}/{}", done, total)});
