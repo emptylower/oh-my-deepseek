@@ -62,7 +62,7 @@ fn evidence_file_discovery_end_to_end() {
     let result = verify_claim(&claim, dir.path(), &audit_log);
     assert!(result.is_ok());
     match result.unwrap() {
-        VerificationResult::Verified { method } => {
+        VerificationResult::Verified { method, .. } => {
             assert_eq!(method, "fs_exists");
         }
         _ => panic!("Expected Verified result"),
