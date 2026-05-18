@@ -6,7 +6,7 @@ INSTALL_DIR="${HOME}/.local/bin"
 CONFIG_DIR="${HOME}/.deepseek-omd"
 SOURCE_DIR="${HOME}/.deepseek-omd/source"
 
-REPO_URL="${OMD_REPO_URL:-https://github.com/emptylower/DeepSeek-TUI.git}"
+REPO_URL="${OMD_REPO_URL:-https://github.com/emptylower/oh-my-deepseek.git}"
 
 echo "=== OhMyDeepSeek Installer ==="
 echo ""
@@ -20,11 +20,11 @@ if [ -d "$SOURCE_DIR" ]; then
     echo "Updating existing source..."
     cd "$SOURCE_DIR"
     git fetch origin
-    git checkout omd-phase2
-    git pull origin omd-phase2
+    git checkout main
+    git pull origin main
 else
     echo "Cloning DeepSeek-TUI..."
-    git clone --branch omd-phase2 "$REPO_URL" "$SOURCE_DIR"
+    git clone --branch main "$REPO_URL" "$SOURCE_DIR"
     cd "$SOURCE_DIR"
 fi
 
