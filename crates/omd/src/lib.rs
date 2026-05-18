@@ -8,6 +8,7 @@ pub mod workers;
 pub mod tasks;
 pub mod scope;
 pub mod shell_policy;
+pub mod shell_parser;
 pub mod evidence;
 pub mod transition_guards;
 
