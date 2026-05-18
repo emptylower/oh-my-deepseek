@@ -13,6 +13,35 @@
 /// - Process substitution: `<(...)`, `>(...)`
 /// - Unterminated quotes → error
 
+/// Advance past a balanced `(...)` block (caller must have consumed the opening `(`).
+/// Handles nested quotes inside.
+fn skip_paren_block(chars: &[char], start: usize) -> usize {
+    let len = chars.len();
+    let mut i = start;
+    let mut depth = 1usize;
+    while i < len && depth > 0 {
+        match chars[i] {
+            '(' => { depth += 1; i += 1; }
+            ')' => { depth -= 1; i += 1; }
+            '\'' => {
+                i += 1;
+                while i < len && chars[i] != '\'' { i += 1; }
+                if i < len { i += 1; }
+            }
+            '"' => {
+                i += 1;
+                while i < len && chars[i] != '"' {
+                    if chars[i] == '\\' && i + 1 < len { i += 1; }
+                    i += 1;
+                }
+                if i < len { i += 1; }
+            }
+            _ => { i += 1; }
+        }
+    }
+    i
+}
+
 /// Operators that separate sub-commands in a shell command chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operator {
@@ -180,28 +209,7 @@ pub fn tokenize(input: &str) -> Result<Vec<String>, String> {
                 }
                 if i + 1 < len && chars[i + 1] == '(' {
                     // process substitution >(...) — skip the block
-                    i += 2;
-                    let mut depth = 1usize;
-                    while i < len && depth > 0 {
-                        match chars[i] {
-                            '(' => { depth += 1; i += 1; }
-                            ')' => { depth -= 1; i += 1; }
-                            '\'' => {
-                                i += 1;
-                                while i < len && chars[i] != '\'' { i += 1; }
-                                if i < len { i += 1; }
-                            }
-                            '"' => {
-                                i += 1;
-                                while i < len && chars[i] != '"' {
-                                    if chars[i] == '\\' { i += 1; }
-                                    i += 1;
-                                }
-                                if i < len { i += 1; }
-                            }
-                            _ => { i += 1; }
-                        }
-                    }
+                    i = skip_paren_block(&chars, i + 2);
                 } else if i + 1 < len && chars[i + 1] == '>' {
                     i += 2; // >>
                 } else {
@@ -219,28 +227,7 @@ pub fn tokenize(input: &str) -> Result<Vec<String>, String> {
                         in_token = false;
                     }
                     // Skip over the <( ... ) block
-                    i += 2; // skip `<(`
-                    let mut depth = 1usize;
-                    while i < len && depth > 0 {
-                        match chars[i] {
-                            '(' => { depth += 1; i += 1; }
-                            ')' => { depth -= 1; i += 1; }
-                            '\'' => {
-                                i += 1;
-                                while i < len && chars[i] != '\'' { i += 1; }
-                                if i < len { i += 1; }
-                            }
-                            '"' => {
-                                i += 1;
-                                while i < len && chars[i] != '"' {
-                                    if chars[i] == '\\' { i += 1; }
-                                    i += 1;
-                                }
-                                if i < len { i += 1; }
-                            }
-                            _ => { i += 1; }
-                        }
-                    }
+                    i = skip_paren_block(&chars, i + 2);
                 } else {
                     // Plain `<` redirect — treat as separator (drop)
                     if in_token {
@@ -261,28 +248,7 @@ pub fn tokenize(input: &str) -> Result<Vec<String>, String> {
                         current.clear();
                         in_token = false;
                     }
-                    i += 2;
-                    let mut depth = 1usize;
-                    while i < len && depth > 0 {
-                        match chars[i] {
-                            '(' => { depth += 1; i += 1; }
-                            ')' => { depth -= 1; i += 1; }
-                            '\'' => {
-                                i += 1;
-                                while i < len && chars[i] != '\'' { i += 1; }
-                                if i < len { i += 1; }
-                            }
-                            '"' => {
-                                i += 1;
-                                while i < len && chars[i] != '"' {
-                                    if chars[i] == '\\' { i += 1; }
-                                    i += 1;
-                                }
-                                if i < len { i += 1; }
-                            }
-                            _ => { i += 1; }
-                        }
-                    }
+                    i = skip_paren_block(&chars, i + 2);
                 } else {
                     // $VAR or similar — treat as regular chars
                     current.push(ch);
@@ -361,17 +327,7 @@ pub fn split_commands(input: &str) -> Vec<(Operator, String)> {
             }
 
             '$' if i + 1 < len && chars[i + 1] == '(' => {
-                i += 2;
-                let mut depth = 1usize;
-                while i < len && depth > 0 {
-                    match chars[i] {
-                        '(' => { depth += 1; i += 1; }
-                        ')' => { depth -= 1; i += 1; }
-                        '\'' => { i += 1; while i < len && chars[i] != '\'' { i += 1; } if i < len { i += 1; } }
-                        '"' => { i += 1; while i < len && chars[i] != '"' { if chars[i] == '\\' { i += 1; } i += 1; } if i < len { i += 1; } }
-                        _ => { i += 1; }
-                    }
-                }
+                i = skip_paren_block(&chars, i + 2);
             }
 
             '`' => {
@@ -384,31 +340,11 @@ pub fn split_commands(input: &str) -> Vec<(Operator, String)> {
             }
 
             '<' if i + 1 < len && chars[i + 1] == '(' => {
-                i += 2;
-                let mut depth = 1usize;
-                while i < len && depth > 0 {
-                    match chars[i] {
-                        '(' => { depth += 1; i += 1; }
-                        ')' => { depth -= 1; i += 1; }
-                        '\'' => { i += 1; while i < len && chars[i] != '\'' { i += 1; } if i < len { i += 1; } }
-                        '"' => { i += 1; while i < len && chars[i] != '"' { if chars[i] == '\\' { i += 1; } i += 1; } if i < len { i += 1; } }
-                        _ => { i += 1; }
-                    }
-                }
+                i = skip_paren_block(&chars, i + 2);
             }
 
             '>' if i + 1 < len && chars[i + 1] == '(' => {
-                i += 2;
-                let mut depth = 1usize;
-                while i < len && depth > 0 {
-                    match chars[i] {
-                        '(' => { depth += 1; i += 1; }
-                        ')' => { depth -= 1; i += 1; }
-                        '\'' => { i += 1; while i < len && chars[i] != '\'' { i += 1; } if i < len { i += 1; } }
-                        '"' => { i += 1; while i < len && chars[i] != '"' { if chars[i] == '\\' { i += 1; } i += 1; } if i < len { i += 1; } }
-                        _ => { i += 1; }
-                    }
-                }
+                i = skip_paren_block(&chars, i + 2);
             }
 
             '&' => {
@@ -595,15 +531,7 @@ pub fn has_redirect(input: &str) -> bool {
             '>' => {
                 // `>(...)` is process substitution, not a redirect
                 if i + 1 < len && chars[i + 1] == '(' {
-                    i += 2;
-                    let mut depth = 1usize;
-                    while i < len && depth > 0 {
-                        match chars[i] {
-                            '(' => { depth += 1; i += 1; }
-                            ')' => { depth -= 1; i += 1; }
-                            _ => { i += 1; }
-                        }
-                    }
+                    i = skip_paren_block(&chars, i + 2);
                 } else {
                     return true;
                 }
@@ -617,6 +545,9 @@ pub fn has_redirect(input: &str) -> bool {
 }
 
 /// Returns `true` if the input contains unquoted command substitution (`$(...)` or backticks).
+///
+/// Note: `$(...)` and backticks ARE expanded inside double quotes in POSIX shells,
+/// so we detect them there too. Only single quotes suppress expansion.
 pub fn has_command_substitution(input: &str) -> bool {
     let chars: Vec<char> = input.chars().collect();
     let len = chars.len();
@@ -625,17 +556,25 @@ pub fn has_command_substitution(input: &str) -> bool {
     while i < len {
         match chars[i] {
             '\'' => {
+                // Single quotes: no expansion at all — skip literally
                 i += 1;
                 while i < len && chars[i] != '\'' { i += 1; }
                 if i < len { i += 1; }
             }
             '"' => {
+                // Double quotes: $() and backticks still expand — detect them
                 i += 1;
                 while i < len && chars[i] != '"' {
+                    if chars[i] == '$' && i + 1 < len && chars[i + 1] == '(' {
+                        return true; // $() expands inside double quotes
+                    }
+                    if chars[i] == '`' {
+                        return true; // backticks expand inside double quotes
+                    }
                     if chars[i] == '\\' && i + 1 < len { i += 1; }
                     i += 1;
                 }
-                if i < len { i += 1; }
+                if i < len { i += 1; } // skip closing quote
             }
             '\\' => {
                 i += 2;
@@ -956,6 +895,18 @@ mod tests {
     fn has_command_sub_inside_quotes_ignored() {
         // Inside single quotes, $(...) is literal
         assert!(!has_command_substitution("echo '$(rm -rf /)'"));
+    }
+
+    #[test]
+    fn has_command_sub_dollar_paren_inside_double_quotes() {
+        // CRITICAL: $() expands inside double quotes — must be detected
+        assert!(has_command_substitution(r#"echo "$(rm -rf /)""#));
+    }
+
+    #[test]
+    fn has_command_sub_backtick_inside_double_quotes() {
+        // CRITICAL: backticks expand inside double quotes — must be detected
+        assert!(has_command_substitution(r#"echo "`rm -rf /`""#));
     }
 
     // ── has_process_substitution ───────────────────────────────────────────

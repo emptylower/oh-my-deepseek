@@ -1,3 +1,5 @@
+use crate::shell_parser;
+
 /// Shell execution policy tiers (Contract 3 from spec).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShellPolicy {
@@ -8,8 +10,6 @@ pub enum ShellPolicy {
     /// Unrestricted shell
     Full,
 }
-
-use crate::shell_parser;
 
 /// Binary + optional subcommand prefix allowlist for ReadOnly mode.
 const READ_ONLY_ALLOWLIST: &[(&str, &str)] = &[
@@ -51,8 +51,7 @@ fn validate_read_only(command: &str) -> Result<(), String> {
     if shell_parser::has_pipe(command) {
         return Err(
             "Piped commands are not supported in read-only mode. \
-             Use individual commands instead (pipe validation requires a full shell \
-             parser, which is Plan 4 scope).".to_string()
+             Use individual commands instead.".to_string()
         );
     }
 
@@ -154,4 +153,33 @@ fn is_allowed_read_command(command: &str) -> bool {
             false
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn command_sub_inside_double_quotes_rejected() {
+        // CRITICAL: $() inside double quotes must be caught
+        assert!(validate_command(r#"echo "$(rm -rf /)""#, ShellPolicy::ReadOnly).is_err());
+    }
+
+    #[test]
+    fn backtick_inside_double_quotes_rejected() {
+        // CRITICAL: backticks inside double quotes must be caught
+        assert!(validate_command(r#"echo "`rm -rf /`""#, ShellPolicy::ReadOnly).is_err());
+    }
+
+    #[test]
+    fn safe_echo_allowed() {
+        assert!(validate_command("echo hello", ShellPolicy::ReadOnly).is_ok());
+    }
+
+    #[test]
+    fn pipe_rejected_with_helpful_message() {
+        let err = validate_command("ls | wc -l", ShellPolicy::ReadOnly).unwrap_err();
+        assert!(err.contains("Piped commands are not supported"));
+        assert!(!err.contains("Plan 4 scope"));
+    }
 }
