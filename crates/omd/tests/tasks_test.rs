@@ -150,9 +150,22 @@ fn auto_blocked_and_unblocked() {
     graph.add_task(t2);
     graph.validate().unwrap();
 
+    // After validate, T2 is still Pending (recompute not called yet).
+    // Call recompute to simulate init_task_graph behavior.
+    graph.recompute_blocked_status();
+
+    // T2 should now be auto-blocked (T1 is not done)
+    assert_eq!(graph.get("T2").unwrap().status, TaskStatus::Blocked);
+
+    // Only T1 is runnable (T2 is Blocked, not Pending)
     assert_eq!(graph.next_runnable(), Some("T1".to_string()));
+
+    // Complete T1 — recompute is called inside set_status
     graph.set_status("T1", TaskStatus::Active).unwrap();
     graph.set_status("T1", TaskStatus::Done).unwrap();
+
+    // T2 should now be auto-unblocked back to Pending
+    assert_eq!(graph.get("T2").unwrap().status, TaskStatus::Pending);
     assert_eq!(graph.next_runnable(), Some("T2".to_string()));
 }
 

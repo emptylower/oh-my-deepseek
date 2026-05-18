@@ -156,31 +156,68 @@ impl TaskGraph {
             }
         }
 
-        let task = self.get_mut(id)
+        // Use index-based access to avoid holding a mutable borrow across the recompute call
+        let idx = self.tasks.iter().position(|t| t.id == id)
             .ok_or_else(|| format!("Task '{}' not found", id))?;
 
         // Reject retry if attempts exhausted
-        if task.status == TaskStatus::Failed && status == TaskStatus::Active {
-            if task.attempts >= task.max_attempts {
-                return Err(format!("Task '{}' exhausted {} retries", id, task.max_attempts));
+        if self.tasks[idx].status == TaskStatus::Failed && status == TaskStatus::Active {
+            if self.tasks[idx].attempts >= self.tasks[idx].max_attempts {
+                return Err(format!("Task '{}' exhausted {} retries", id, self.tasks[idx].max_attempts));
             }
         }
 
         // Validate transition
-        if !is_valid_transition(&task.status, &status) {
+        if !is_valid_transition(&self.tasks[idx].status, &status) {
             return Err(format!(
                 "Invalid transition for '{}': {:?} → {:?}",
-                id, task.status, status
+                id, self.tasks[idx].status, status
             ));
         }
 
         // Track retry attempts
-        if task.status == TaskStatus::Active && status == TaskStatus::Failed {
-            task.attempts += 1;
+        if self.tasks[idx].status == TaskStatus::Active && status == TaskStatus::Failed {
+            self.tasks[idx].attempts += 1;
         }
 
-        task.status = status;
+        self.tasks[idx].status = status;
+
+        // Recompute blocked/pending for all dependent tasks
+        self.recompute_blocked_status();
         Ok(())
+    }
+
+    /// Recompute blocked/pending status based on dependency resolution.
+    /// - Pending + unmet deps → Blocked
+    /// - Blocked + all deps Done/Skipped → Pending
+    pub fn recompute_blocked_status(&mut self) {
+        // Collect IDs of done/skipped tasks for lookups
+        let done_ids: std::collections::HashSet<String> = self.tasks.iter()
+            .filter(|t| matches!(t.status, TaskStatus::Done | TaskStatus::Skipped))
+            .map(|t| t.id.clone())
+            .collect();
+
+        for task in &mut self.tasks {
+            match task.status {
+                TaskStatus::Pending => {
+                    // If it has deps and any dep is not Done/Skipped → Blocked
+                    if !task.depends_on.is_empty()
+                        && !task.depends_on.iter().all(|d| done_ids.contains(d))
+                    {
+                        task.status = TaskStatus::Blocked;
+                    }
+                }
+                TaskStatus::Blocked => {
+                    // If all deps are Done/Skipped → Pending
+                    if task.depends_on.is_empty()
+                        || task.depends_on.iter().all(|d| done_ids.contains(d))
+                    {
+                        task.status = TaskStatus::Pending;
+                    }
+                }
+                _ => {} // Don't touch Active/Done/Failed/Skipped
+            }
+        }
     }
 
     /// Returns the ID of the next task that can run (Pending + all deps Done).

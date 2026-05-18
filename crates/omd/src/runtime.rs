@@ -136,6 +136,7 @@ impl OmdRuntimeState {
             graph.add_task(task);
         }
         graph.validate()?;
+        graph.recompute_blocked_status(); // Initial blocked assignment
         self.task_graph = Some(graph);
         self.persist_state();
         Ok(())
