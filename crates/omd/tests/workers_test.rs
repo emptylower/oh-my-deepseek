@@ -52,7 +52,7 @@ fn nuwa_can_run_tests_not_edit() {
     assert!(w.allowed_tools.contains(&"read_file"));
     assert!(w.allowed_tools.contains(&"exec_shell"));
     assert!(!w.allowed_tools.contains(&"edit_file"));
-    assert!(!w.allowed_tools.contains(&"omd_checkpoint"));
+    assert!(w.allowed_tools.contains(&"omd_checkpoint"));
 }
 
 #[test]
@@ -67,11 +67,18 @@ fn workers_cannot_delegate() {
 }
 
 #[test]
-fn no_worker_has_omd_checkpoint() {
+fn nuwa_has_omd_checkpoint() {
     let registry = WorkerRegistry::new();
-    for name in &["tongtian-junior", "kunpeng", "nuwa", "shennong", "yangmei", "cangjie", "zhurong"] {
+    let nuwa = registry.get("nuwa").unwrap();
+    assert!(nuwa.allowed_tools.contains(&"omd_checkpoint"), "Nuwa should have omd_checkpoint for verification progress reporting");
+}
+
+#[test]
+fn non_checkpoint_workers_lack_omd_checkpoint() {
+    let registry = WorkerRegistry::new();
+    for name in &["tongtian-junior", "kunpeng", "shennong", "yangmei", "cangjie", "zhurong"] {
         let w = registry.get(name).unwrap();
-        assert!(!w.allowed_tools.contains(&"omd_checkpoint"), "{name} must not have omd_checkpoint — sub-agent runtimes don't register OMD tools");
+        assert!(!w.allowed_tools.contains(&"omd_checkpoint"), "{name} must not have omd_checkpoint");
     }
 }
 

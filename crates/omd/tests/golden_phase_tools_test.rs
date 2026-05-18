@@ -136,6 +136,28 @@ fn fuxi_plan_limited_write() {
     assert!(!policy.is_allowed("omd_delegate"));
 }
 
+// ── 5b. Fuxi::Architect has omd_checkpoint ──────────────────────────────────
+
+#[test]
+fn fuxi_architect_has_checkpoint() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Architect));
+    assert!(policy.is_allowed("omd_checkpoint"), "Fuxi Architect should have omd_checkpoint");
+    assert!(policy.is_allowed("omd_phase_complete"));
+    assert!(policy.is_allowed("omd_state_read"));
+    assert!(!policy.is_allowed("write_file"));
+}
+
+// ── 5c. Pangu::Decompose has omd_checkpoint ─────────────────────────────────
+
+#[test]
+fn pangu_decompose_has_checkpoint() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Pangu(PanguPhase::Decompose));
+    assert!(policy.is_allowed("omd_checkpoint"), "Pangu Decompose should have omd_checkpoint");
+    assert!(policy.is_allowed("omd_phase_complete"));
+    assert!(policy.is_allowed("omd_state_read"));
+    assert!(!policy.is_allowed("omd_delegate"));
+}
+
 // ── 6. Pangu::Delegate ───────────────────────────────────────────────────────
 
 #[test]

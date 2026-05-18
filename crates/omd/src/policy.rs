@@ -100,7 +100,7 @@ static FUXI_EXPLORE: &[&str] = &[
 static FUXI_ARCHITECT: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_log", "git_diff",
-    "omd_phase_complete", "omd_state_read",
+    "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 static FUXI_PLAN: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
@@ -116,7 +116,7 @@ static PANGU_LOAD_PLAN: &[&str] = &[
 ];
 static PANGU_DECOMPOSE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
-    "omd_phase_complete", "omd_state_read",
+    "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 static PANGU_DELEGATE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
