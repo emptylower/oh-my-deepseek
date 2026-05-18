@@ -4330,6 +4330,8 @@ struct SubAgentToolRegistry {
     omd_write_scope: Option<Vec<String>>,
     /// When true, exec_shell is forced to read-only mode (blocks writes via shell).
     omd_shell_read_only: bool,
+    /// Workspace root for scope validation (avoids relying on process cwd).
+    workspace: std::path::PathBuf,
 }
 
 impl SubAgentToolRegistry {
@@ -4370,6 +4372,7 @@ impl SubAgentToolRegistry {
         Self {
             allowed_tools: explicit_allowed_tools,
             auto_approve: runtime.context.auto_approve,
+            workspace: runtime.context.workspace.clone(),
             registry,
             omd_write_scope,
             omd_shell_read_only,
@@ -4430,7 +4433,7 @@ impl SubAgentToolRegistry {
             match name {
                 "write_file" | "edit_file" => {
                     if let Some(path) = input.get("path").and_then(|v| v.as_str()) {
-                        let validator = omd::WriteScopeValidator::from_strings(scope_patterns);
+                        let validator = omd::WriteScopeValidator::from_strings_with_workspace(scope_patterns, &self.workspace);
                         if !validator.is_allowed(path) {
                             return Err(anyhow!(
                                 "Write blocked: path '{}' is outside the allowed write scope for this task. \
@@ -4441,7 +4444,7 @@ impl SubAgentToolRegistry {
                     }
                 }
                 "apply_patch" => {
-                    let validator = omd::WriteScopeValidator::from_strings(scope_patterns);
+                    let validator = omd::WriteScopeValidator::from_strings_with_workspace(scope_patterns, &self.workspace);
                     let mut paths_to_check: Vec<String> = Vec::new();
 
                     // Form 1: input["path"] (single-file patch mode)

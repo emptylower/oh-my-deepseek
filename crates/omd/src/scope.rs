@@ -30,6 +30,13 @@ impl WriteScopeValidator {
         }
     }
 
+    pub fn from_strings_with_workspace(patterns: &[String], workspace: &Path) -> Self {
+        Self {
+            patterns: patterns.to_vec(),
+            workspace: workspace.to_path_buf(),
+        }
+    }
+
     fn canonicalize_path(&self, path: &str) -> Option<String> {
         if path.contains("..") {
             return None;

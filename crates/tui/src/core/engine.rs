@@ -1017,19 +1017,26 @@ impl Engine {
             };
             if needs_init {
                 // Check if we should resume an existing session (detected by Hongjun)
-                if self.omd_resume_context.is_some() {
+                let init_result = if self.omd_resume_context.is_some() {
                     if let Some(session_state) = omd::OmdRuntimeState::detect_unfinished_session(&self.session.workspace) {
-                        self.omd_runtime = omd::OmdRuntimeState::shared_resume(
+                        omd::OmdRuntimeState::shared_resume(
                             &self.session.workspace,
                             session_state,
-                        ).ok();
+                        )
                     } else {
-                        self.omd_runtime =
-                            omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
+                        omd::OmdRuntimeState::shared(agent, &self.session.workspace)
                     }
                 } else {
-                    self.omd_runtime =
-                        omd::OmdRuntimeState::shared(agent, &self.session.workspace).ok();
+                    omd::OmdRuntimeState::shared(agent, &self.session.workspace)
+                };
+                match init_result {
+                    Ok(rt) => self.omd_runtime = Some(rt),
+                    Err(e) => {
+                        tracing::error!("OMD session lock failed: {e}");
+                        self.omd_runtime = None;
+                        // Fall back to non-OMD mode — cannot proceed without lock
+                        return;
+                    }
                 }
             }
         }
