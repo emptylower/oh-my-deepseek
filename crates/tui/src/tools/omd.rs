@@ -72,8 +72,7 @@ impl ToolSpec for OmdPhaseCompleteTool {
                     // /omd-phase-complete <target_phase>.
                     if let omd::EvidenceClaim::ExplicitSkip { .. } = claim {
                         return Err(ToolError::execution_failed(
-                            "ExplicitSkip cannot be used by the model. Phase transitions requiring \
-                             evidence bypass must be initiated by the user via /omd-phase-complete <target_phase>.".to_string()
+                            "ExplicitSkip cannot be used by the model. To bypass evidence verification, ask the user to type: /omd-phase-complete <target_phase>".to_string()
                         ));
                     }
                     match omd::verify_claim(&claim, workspace, audit_log) {

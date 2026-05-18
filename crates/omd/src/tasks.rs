@@ -211,4 +211,9 @@ impl TaskGraph {
             .count();
         (done, self.tasks.len())
     }
+
+    /// Iterate all tasks in the graph.
+    pub fn tasks(&self) -> &[Task] {
+        &self.tasks
+    }
 }
