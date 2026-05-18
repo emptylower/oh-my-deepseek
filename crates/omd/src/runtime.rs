@@ -91,15 +91,17 @@ impl OmdRuntimeState {
         let task_graph = event_state.as_ref()
             .and_then(|s| s.task_graph.clone())
             .map(|mut event_graph| {
-                // Merge metadata from current.json into event-derived graph.
-                // Event replay gives us correct status but lacks changed_files/evidence.
+                // Merge metadata from current.json: events are authoritative for STATUS,
+                // but current.json has richer metadata (changed_files, evidence) because
+                // task_definition in events is captured before mutation. Always prefer
+                // current.json metadata when available.
                 if let Some(ref cj_graph) = session_state.task_graph {
                     for event_task in &mut event_graph.tasks {
                         if let Some(cj_task) = cj_graph.get(&event_task.id) {
-                            if event_task.changed_files.is_empty() {
+                            if !cj_task.changed_files.is_empty() {
                                 event_task.changed_files = cj_task.changed_files.clone();
                             }
-                            if event_task.evidence.is_empty() {
+                            if !cj_task.evidence.is_empty() {
                                 event_task.evidence = cj_task.evidence.clone();
                             }
                         }
@@ -354,7 +356,7 @@ impl OmdRuntimeState {
                         &json!({
                             "ts": Utc::now().to_rfc3339(),
                             "event": "fuxi_handoff",
-                            "plan_path": ".omd/plans/latest.md",
+                            "user_initiated": true,
                             "message": "Plan ready. Use /omd-execute to start Pangu.",
                         }),
                     );
