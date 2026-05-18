@@ -180,11 +180,11 @@ struct Cli {
     no_project_config: bool,
 
     /// Run the OMD update script (pull latest source and rebuild)
-    #[arg(long = "omd-update", hide = true)]
+    #[arg(long = "update", hide = true)]
     omd_update: bool,
 
     /// Run the OMD uninstall script
-    #[arg(long = "omd-uninstall", hide = true)]
+    #[arg(long = "uninstall", hide = true)]
     omd_uninstall: bool,
 }
 
