@@ -1898,6 +1898,23 @@ impl Engine {
                                 }
                             }
 
+                            // Fuxi handoff: when omd_phase_complete returns fuxi_handoff=true,
+                            // emit an event so the UI can show the one-key confirm widget.
+                            if outcome.name == "omd_phase_complete" {
+                                let is_fuxi_handoff = output.metadata.as_ref()
+                                    .and_then(|m| m.get("fuxi_handoff"))
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                if is_fuxi_handoff {
+                                    let plan_path = output.metadata.as_ref()
+                                        .and_then(|m| m.get("plan_path"))
+                                        .and_then(|v| v.as_str())
+                                        .unwrap_or(".omd/plans/latest.md")
+                                        .to_string();
+                                    let _ = self.tx_event.send(Event::FuxiHandoff { plan_path }).await;
+                                }
+                            }
+
                             self.run_post_edit_lsp_hook(&outcome.name, &tool_input)
                                 .await;
                         }

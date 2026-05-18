@@ -251,7 +251,7 @@ impl OmdRuntimeState {
                     &json!({"ts": Utc::now().to_rfc3339(), "event": "phase_transition", "from": from, "to": to, "reason": reason, "evidence": evidence}),
                 );
                 // Fuxi handoff event: emit when Fuxi finishes planning (Plan→Done)
-                if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
+                let fuxi_handoff_plan_path = if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
                     let plan_path = evidence.iter()
                         .filter_map(|e| e.get("path").and_then(|p| p.as_str()))
                         .next()
@@ -265,10 +265,18 @@ impl OmdRuntimeState {
                             "message": "Plan ready. Use /omd-execute to start Pangu, or Tab to choose agent.",
                         }),
                     );
-                }
+                    Some(plan_path.to_string())
+                } else {
+                    None
+                };
                 // Clear audit log on phase transition (evidence is phase-scoped)
                 self.audit_log.clear();
-                json!({"ok": true, "phase": to, "message": format!("Transitioned from {} to {}. Tool availability updated.", from, to), "tools_changed": true})
+                let mut result = json!({"ok": true, "phase": to, "message": format!("Transitioned from {} to {}. Tool availability updated.", from, to), "tools_changed": true});
+                if let Some(plan_path) = fuxi_handoff_plan_path {
+                    result["fuxi_handoff"] = json!(true);
+                    result["plan_path"] = json!(plan_path);
+                }
+                result
             }
             Err(e) => json!({"ok": false, "error": e, "current_phase": from, "valid_next_phases": self.fsm.valid_next_phases()}),
         }

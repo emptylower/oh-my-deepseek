@@ -1156,6 +1156,11 @@ pub struct App {
     /// Derived title for the current session shown in the composer border.
     /// Updated when `EngineEvent::SessionUpdated` fires or a saved session is loaded.
     pub session_title: Option<String>,
+
+    /// Fuxi handoff pending: when Fuxi transitions to Done, this holds the plan
+    /// path so the UI can show a one-key confirm widget for handing off to Pangu.
+    /// Cleared on any mode switch.
+    pub fuxi_handoff_pending: Option<String>,
 }
 
 /// Message queued while the engine is busy.
@@ -1651,6 +1656,7 @@ impl App {
                 .and_then(|tui| tui.composer_arrows_scroll)
                 .unwrap_or(!use_mouse_capture),
             session_title: None,
+            fuxi_handoff_pending: None,
         }
     }
 
@@ -1753,6 +1759,9 @@ impl App {
             self.plan_prompt_pending = false;
             self.plan_tool_used_in_turn = false;
         }
+
+        // Clear any pending Fuxi handoff widget on mode switch
+        self.fuxi_handoff_pending = None;
 
         // Execute mode change hooks
         let context = HookContext::new()

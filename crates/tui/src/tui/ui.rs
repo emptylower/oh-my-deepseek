@@ -1398,6 +1398,17 @@ async fn run_event_loop(
                     EngineEvent::Status { message } => {
                         app.status_message = Some(message);
                     }
+                    EngineEvent::FuxiHandoff { plan_path } => {
+                        // Fuxi finished planning — store the plan path so the UI
+                        // can render the one-key confirm widget and handle Enter.
+                        app.fuxi_handoff_pending = Some(plan_path.clone());
+                        app.add_message(HistoryCell::System {
+                            content: format!(
+                                "Plan ready: {} → Press Enter to execute with Pangu | Tab to choose another agent",
+                                plan_path
+                            ),
+                        });
+                    }
                     EngineEvent::SessionUpdated {
                         session_id,
                         messages,
@@ -3055,6 +3066,24 @@ async fn run_event_loop(
                     }
                 }
                 KeyCode::Enter => {
+                    // Fuxi handoff one-key confirm: when a Fuxi handoff is pending
+                    // and the composer is empty, Enter triggers /omd-execute.
+                    if app.input.trim().is_empty() {
+                        if let Some(plan_path) = app.fuxi_handoff_pending.take() {
+                            let cmd = format!("/omd-execute {}", plan_path);
+                            execute_command_input(
+                                terminal,
+                                app,
+                                &mut engine_handle,
+                                &task_manager,
+                                config,
+                                &mut web_config_session,
+                                &cmd,
+                            )
+                            .await?;
+                            continue;
+                        }
+                    }
                     // #573: when the user typed a slash-command prefix that
                     // the popup is matching (e.g. `/mo` → `/model`), Enter
                     // should run the *highlighted match* rather than

@@ -200,6 +200,14 @@ pub enum Event {
         message: crate::tools::subagent::MailboxMessage,
     },
 
+    // === OMD Events ===
+    /// Fuxi completed planning and is handing off to Pangu.
+    /// The UI should display a one-key confirm widget.
+    FuxiHandoff {
+        /// Path to the plan file (e.g. `.omd/plans/refactor-auth.md`).
+        plan_path: String,
+    },
+
     // === System Events ===
     /// An error occurred
     Error {
