@@ -67,10 +67,15 @@ impl ToolSpec for OmdPhaseCompleteTool {
             for ev_value in &evidence {
                 // Try to parse as EvidenceClaim
                 if let Ok(claim) = serde_json::from_value::<omd::EvidenceClaim>(ev_value.clone()) {
-                    // ExplicitSkip bypasses verification — it's the "I don't have
-                    // evidence" acknowledgment. Transition guards accept it, and the
-                    // /omd-phase-complete command is the user-ack path for confirmation.
-                    if matches!(claim, omd::EvidenceClaim::ExplicitSkip { .. }) {
+                    // ExplicitSkip bypasses verification — it's an explicit acknowledgment
+                    // that evidence is unavailable. Must include a non-empty reason.
+                    if let omd::EvidenceClaim::ExplicitSkip { ref reason } = claim {
+                        if reason.trim().is_empty() {
+                            return Err(ToolError::execution_failed(
+                                "ExplicitSkip requires a non-empty reason explaining why \
+                                 evidence is being skipped.".to_string()
+                            ));
+                        }
                         continue;
                     }
                     match omd::verify_claim(&claim, workspace, audit_log) {
@@ -118,7 +123,7 @@ impl ToolSpec for OmdPhaseCompleteTool {
                 }).collect();
                 return Err(ToolError::execution_failed(format!(
                     "Transition from '{}' to '{}' requires evidence of type(s): {:?}. \
-                     Provide the required evidence or use ExplicitSkip (requires user ack).",
+                     Provide the required evidence or use ExplicitSkip with a reason.",
                     current_phase.name(), next_phase, missing_names
                 )));
             }
