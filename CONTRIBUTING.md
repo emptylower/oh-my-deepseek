@@ -1,219 +1,443 @@
-# Contributing to DeepSeek TUI
+# Contributing to OhMyDeepSeek (OMD)
 
-Thank you for your interest in contributing to DeepSeek TUI! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to OhMyDeepSeek! This document provides guidelines and instructions for contributing to the project.
 
 ## Getting Started
 
 ### Prerequisites
 
-- Rust 1.88 or later (edition 2024)
-- Cargo package manager
-- Git
+- **Rust 1.88+** (edition 2024)
+- **Cargo** package manager
+- **Git**
+- **DeepSeek API key** for testing (`DEEPSEEK_API_KEY` env var)
 
 ### Setting Up Development Environment
 
 1. Fork and clone the repository:
    ```bash
-   git clone https://github.com/YOUR_USERNAME/DeepSeek-TUI.git
-   cd DeepSeek-TUI
+   git clone https://github.com/YOUR_USERNAME/oh-my-deepseek.git
+   cd oh-my-deepseek
    ```
 
-2. Build the project:
+2. Set up your development environment:
    ```bash
-   cargo build
+   # Install Rust (if needed)
+   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+   rustup toolchain install stable
+   rustup component add rustfmt clippy
    ```
 
-3. Run tests:
+3. Build the project:
    ```bash
-   cargo test
+   cargo build --release
    ```
 
-4. Run with development settings:
+4. Run tests:
    ```bash
-   cargo run
+   cargo test --workspace
+   ```
+
+5. Run OMD specifically:
+   ```bash
+   cargo test -p omd
+   cargo run --bin deepseek-tui -- --help
    ```
 
 ## Development Workflow
 
 ### Code Style
 
-- Run `cargo fmt` before committing to ensure consistent formatting
-- Run `cargo clippy` and address all warnings
-- Follow Rust naming conventions (snake_case for functions/variables, CamelCase for types)
-- Add documentation comments for public APIs
+We follow Rust conventions and enforce consistency across the codebase:
+
+- **Formatting:** Run `cargo fmt` before committing
+  ```bash
+  cargo fmt --all
+  ```
+
+- **Linting:** Run `cargo clippy` and address all warnings
+  ```bash
+  cargo clippy --workspace --all-targets --all-features
+  ```
+
+- **Naming Conventions:**
+  - `snake_case` for functions, variables, and module names
+  - `CamelCase` for types, structs, traits, and enums
+  - `SCREAMING_SNAKE_CASE` for constants
+
+- **Documentation:**
+  - Public APIs must have doc comments (`///`)
+  - Examples and panics should be documented
+  - Use `///` for item docs, `//!` for module docs
+
+Example:
+```rust
+/// Validates write scope against glob patterns.
+///
+/// # Arguments
+/// * `path` - The file path to validate
+/// * `scope` - Glob patterns (e.g., `["src/**/*.rs"]`)
+///
+/// # Returns
+/// `Ok(())` if path is within scope, `Err(ScopeError)` otherwise.
+pub fn validate_write_scope(path: &Path, scope: &[String]) -> Result<()> {
+    // implementation
+}
+```
 
 ### Testing
 
-- Write tests for new functionality
-- Ensure all existing tests pass: `cargo test --workspace --all-features`
-- Colocate unit tests beside the code they cover (standard Rust `#[cfg(test)]`
-  modules), and add integration tests under the owning crate's `tests/`
-  directory (for example `crates/tui/tests/` or `crates/state/tests/`). The
-  repository root `tests/` directory is not used
+OMD ships with **256 tests**. Testing is mandatory for all contributions:
+
+- **Write tests** for new functionality
+- **Colocate unit tests** beside the code they cover using `#[cfg(test)]` modules
+- **Add integration tests** under the owning crate's `tests/` directory (e.g., `crates/omd/tests/`)
+- **Ensure all tests pass** before submitting:
+  ```bash
+  cargo test --workspace --all-features
+  ```
+
+Example test structure:
+```rust
+// In crates/omd/src/scope.rs
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validate_write_scope_allows_matching_paths() {
+        let scope = vec!["src/**/*.rs".to_string()];
+        assert!(validate_write_scope(Path::new("src/main.rs"), &scope).is_ok());
+    }
+
+    #[test]
+    fn test_validate_write_scope_blocks_traversal() {
+        let scope = vec!["src/**/*.rs".to_string()];
+        assert!(validate_write_scope(Path::new("../../../etc/passwd"), &scope).is_err());
+    }
+}
+```
+
+Test by crate:
+```bash
+# OMD core logic
+cargo test -p omd
+
+# TUI integration
+cargo test -p deepseek-tui
+
+# Full workspace
+cargo test --workspace
+```
 
 ### Commit Messages
 
-Use clear, descriptive commit messages following conventional commits:
+Use clear, descriptive commit messages following [Conventional Commits](https://www.conventionalcommits.org/):
 
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation changes
-- `refactor:` Code refactoring
+- `feat:` New feature (agent, worker, evidence type, etc.)
+- `fix:` Bug fix (FSM guard, scope validation, policy enforcement, etc.)
+- `docs:` Documentation changes (README, code comments, guides)
+- `refactor:` Code refactoring (no behavior change)
 - `test:` Adding or updating tests
-- `chore:` Maintenance tasks
+- `chore:` Maintenance tasks (deps, CI, tooling)
+- `perf:` Performance improvements
 
-Example: `feat: add doctor subcommand for system diagnostics`
+Format:
+```
+<type>(<scope>): <subject>
 
-When a commit harvests code from a community PR (see "How Your Contribution
-Lands" below), include a `Harvested from PR #N by @author` line in the commit
-body. An auto-close workflow watches for this pattern and closes the
-referenced PR with credit so the contributor gets a clear signal that
-their work shipped.
+<body>
+
+<footer>
+```
+
+Examples:
+```
+feat(fsm): add ExplicitSkip evidence type for user-gated transitions
+
+test(scope): add 12 new path-traversal blocking tests
+
+fix(shell_policy): handle quoted process substitution in ReadOnly mode
+
+docs(contributing): clarify test structure for FSM modules
+```
+
+When a commit harvests code from a community PR, include:
+```
+Harvested from PR #N by @author
+```
+
+This signals that the PR is closed and credited automatically.
 
 ## How Your Contribution Lands
 
-We follow a deliberate "land what's useful, credit the contributor" model
-that occasionally surprises new contributors. Two paths:
+We follow a deliberate "land what's useful, credit the contributor" model:
 
-### Path 1 — Direct merge
+### Path 1 — Direct Merge (Common)
 
-If your PR is well-scoped, passes CI, doesn't touch the trust-boundary
-surface (auth / sandbox / publishing / branding), and doesn't conflict
-with main, a maintainer merges it directly. This is the most common
-outcome for small bug fixes and well-tested feature additions.
+For well-scoped PRs that:
+- Pass all CI checks
+- Don't touch security boundaries (sandbox policy, auth, publishing)
+- Don't conflict with `main`
+- Include tests
 
-### Path 2 — Harvest
+Outcome: Maintainer merges directly. Your PR is closed with a thank-you.
 
-If your PR is large, mixes scope, conflicts with main, or needs polish
-that's faster for the maintainer to apply than to round-trip with the
-contributor, the maintainer may **harvest** the useful commits or hunks
-into a new commit on `main` rather than merging the PR directly. This is
-**not a rejection** — it means your code landed.
+### Path 2 — Harvest (Also Valuable)
 
-When this happens:
+For PRs that are large, mixed-scope, or conflict with `main`:
+- Maintainer extracts useful commits/hunks into a new commit on `main`
+- Commit message includes `Harvested from PR #N by @your-handle`
+- **This is not rejection** — your code landed
+- PR is closed with credit
+- You're credited in the next release's CHANGELOG
 
-- The harvested commit's message includes `Harvested from PR #N by
-  @your-handle`. This is the contract: that line is your credit and the
-  signal that your contribution shipped.
-- The `CHANGELOG.md` entry for the next release credits you by handle.
-- The auto-close workflow closes your PR with a templated thank-you and
-  a link to the commit on `main`.
+To increase your chances of direct merge:
 
-To make a future contribution land via the faster Direct-Merge path
-instead of the Harvest path, the highest-leverage things you can do are:
-
-1. **Keep PRs single-purpose.** One bug fix per PR; one feature per PR.
-   Don't mix a refactor with a feature.
-2. **Rebase onto current `main` before opening the PR**, and after CI
-   feedback. Conflicts force the harvest path even when the change is
-   small.
-3. **Include tests** with new behavior. The maintainer often harvests
-   PRs without tests because adding the test is faster than asking the
-   contributor for one.
-4. **Avoid the trust-boundary surface** without prior maintainer
-   sign-off. That includes auth/credential flows, sandbox policy,
-   publishing/release plumbing, and `prompts/` content. PRs that touch
-   these without prior discussion are unlikely to merge directly even
-   when the change is well-implemented.
+1. **Keep PRs single-purpose:** One bug fix per PR; one feature per PR.
+2. **Rebase onto current `main`** before opening and after feedback.
+3. **Include tests** for new behavior.
+4. **Avoid security boundaries** without prior discussion (sandbox policy, auth flows, publishing plumbing).
 
 ## Project Structure
 
-DeepSeek TUI is a Cargo workspace. The live runtime and the majority of TUI,
-engine, and tool code currently live in `crates/tui/src/`. Smaller workspace
-crates provide shared abstractions that are being extracted incrementally.
+OhMyDeepSeek is a Rust workspace with modular crates:
 
 ```
 crates/
-├── tui/           deepseek-tui binary (interactive TUI + runtime API)
-├── cli/           deepseek binary (dispatcher facade)
-├── app-server/    HTTP/SSE + JSON-RPC transport
-├── core/          Agent loop / session / turn management
-├── protocol/      Request/response framing
-├── config/        Config loading, profiles, env precedence
-├── state/         SQLite thread/session persistence
-├── tools/         Typed tool specs and lifecycle
-├── mcp/           MCP client + stdio server
-├── hooks/         Lifecycle hooks (stdout/jsonl/webhook)
-├── execpolicy/    Approval/sandbox policy engine
-├── agent/         Model/provider registry
-└── tui-core/      Event-driven TUI state machine scaffold
+├── omd/              Core OMD logic (agents, FSMs, workers, evidence, policies)
+│   ├── src/
+│   │   ├── fsm.rs                Agent FSM definitions
+│   │   ├── runtime.rs            Engine, delegation, task spawning
+│   │   ├── workers.rs            7 specialist workers
+│   │   ├── tasks.rs              DAG task graph
+│   │   ├── evidence.rs           5-type evidence system
+│   │   ├── shell_parser.rs       Command parsing
+│   │   ├── shell_policy.rs       Shell policy enforcement
+│   │   ├── scope.rs              Write scope validation
+│   │   ├── policy.rs             Tool registry guards
+│   │   ├── state.rs              State persistence, crash recovery
+│   │   ├── transition_guards.rs  Evidence-driven transitions
+│   │   ├── prompts/              Agent system prompts
+│   │   └── lib.rs
+│   └── tests/                    Integration tests (256 tests total)
+├── tui/              TUI integration (ratatui, engine hooks)
+├── cli/              CLI dispatcher
+├── core/             Agent loop, session management
+├── state/            SQLite persistence
+├── tools/            Tool registry
+└── ...other crates
 ```
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the live data flow across
-these crates, including the bottom-up build order.
+### Key Modules in `crates/omd/src/`
+
+| Module | Purpose | Test Count |
+|--------|---------|-----------|
+| `fsm.rs` | State machines for agents | 65+ |
+| `scope.rs` | Write validation, glob matching | 40+ |
+| `policy.rs` | Tool enforcement per phase | 50+ |
+| `evidence.rs` | Evidence collection & validation | 35+ |
+| `state.rs` | Crash recovery, event replay | 30+ |
+| `shell_parser.rs` | Command parsing & validation | 36+ |
+| Integration suite | End-to-end workflows | 36+ |
+
+### Architecture Overview
+
+```
+User Input (TUI)
+     ↓
+Hongjun (Router)
+     ↓ (routes to)
+   ┌─┴─┐
+   ↓   ↓
+Fuxi   Tongtian
+(Plan) (Execute)
+   ↓   ↓
+   └─┬─┘
+     ↓ (handoff)
+   Pangu (Conductor)
+     ↓ (delegates to)
+   ┌──────┬──────┬──────┐
+   ↓      ↓      ↓      ↓ ... (7 workers)
+Jr.   Kunpeng Nuwa  Shennong ...
+(Impl) (Read)  (Test)(Write)
+
+State: ~/.omd/sessions/{id}/
+  ├── current.json     (FSM state)
+  ├── events.jsonl    (event log)
+  └── plan.json       (if from Fuxi)
+```
 
 ## Submitting Changes
 
-1. Create a feature branch from `main`:
-   ```bash
-   git checkout -b feat/your-feature
-   ```
+### 1. Create a Feature Branch
 
-2. Make your changes and commit them
+```bash
+git checkout -b feat/your-feature
+# or
+git checkout -b fix/bug-description
+```
 
-3. Ensure CI passes:
-   ```bash
-   cargo fmt --check
-   cargo clippy
-   cargo test
-   ```
+### 2. Make Changes & Commit
 
-4. Push your branch and create a Pull Request
+Follow code style and commit message guidelines:
 
-5. Describe your changes clearly in the PR description
+```bash
+cargo fmt --all
+cargo clippy --workspace
+git add <files>
+git commit -m "feat(fsm): add new transition guard"
+```
+
+### 3. Ensure CI Passes
+
+```bash
+# Format check
+cargo fmt --check --all
+
+# Linting
+cargo clippy --workspace --all-targets --all-features 2>&1 | head -50
+
+# Type check
+cargo check --workspace
+
+# Tests
+cargo test --workspace --all-features
+```
+
+### 4. Push & Create a Pull Request
+
+```bash
+git push origin feat/your-feature
+```
+
+Then open a PR on GitHub with:
+- Clear title (e.g., "Add ExplicitSkip evidence type")
+- Description of what changed and why
+- Reference related issues (e.g., "Closes #123")
+
+### 5. Respond to Review Feedback
+
+- Push new commits (don't force-push unless asked)
+- Address comments directly in code
+- Re-run tests after changes
 
 ## Pull Request Guidelines
 
-- Keep PRs focused on a single change
-- Update documentation if needed
-- Add tests for new functionality
-- Ensure CI passes before requesting review
+### Keep PRs Focused
 
-## Shape of a Typical PR
+- One bug fix or one feature per PR
+- Don't mix refactoring with feature additions
+- Don't expand scope mid-review
 
-A well-structured PR follows a consistent pattern. Recent exemplars include:
+### Update Documentation
 
-- **#386** — `/init` command: new `crates/tui/src/commands/init.rs` module, project-type detection,
-  AGENTS.md generation, command registration in `commands/mod.rs`, localization strings.
-- **#389** — Inline LSP diagnostics: LSP subsystem in `crates/tui/src/lsp/`, engine hooks in
-  `core/engine/lsp_hooks.rs`, config toggle, test coverage.
-- **#387** — Self-update: new `crates/cli/src/update.rs` module, CLI subcommand registration,
-  HTTP download + SHA256 verification + atomic binary replacement.
-- **#393** — `/share` session URL: new `crates/tui/src/commands/share.rs`, HTML rendering,
-  `gh gist create` integration, command registration.
-- **#343/#346** — (v0.8.5) Runtime thread/turn timeline and durable task manager refactors.
+- Update README if adding a new feature
+- Add/update code comments for complex logic
+- Update CHANGELOG if significant
 
-Typically each PR touches 1–3 new files, modifies 2–5 existing files for wiring
-(registries, dispatch matches, localization), and adds or updates tests. Changes
-are scoped to a single feature or fix — if you discover related work that needs
-doing, open a separate issue rather than expanding the PR scope.
+### Add Tests
 
-Before submitting, run:
+- Unit tests alongside code (`#[cfg(test)]`)
+- Integration tests in `crates/*/tests/`
+- Aim for 80%+ code coverage on new code
+
+### Ensure CI Passes
+
+- All tests pass
+- No clippy warnings
+- Code is formatted with `cargo fmt`
+
+## Shape of a Typical OMD PR
+
+Well-structured PRs follow a consistent pattern:
+
+**Example 1: New Evidence Type**
+- New `ExplicitSkip` variant in `evidence.rs`
+- Evidence collection in relevant agent FSM
+- Transition guard in `transition_guards.rs`
+- Tests in `evidence.rs` + integration test
+- CHANGELOG entry under "Added"
+
+Files changed: 3 new, 4 modified, 8+ tests
+
+**Example 2: Worker Enhancement**
+- New `Cangjie` worker variant in `workers.rs`
+- Write scope definition in `scope.rs`
+- Tool registry update in `policy.rs`
+- Tests in worker spec + integration
+- CHANGELOG entry
+
+Files changed: 3 modified, 15+ tests
+
+**Example 3: Bug Fix**
+- Fix to shell policy in `shell_policy.rs`
+- Regression test demonstrating the bug
+- CHANGELOG entry under "Fixed"
+
+Files changed: 1 modified, 1+ test
+
+Before submitting:
+
 ```bash
-cargo fmt --check
+# Full pre-flight check
+cargo fmt --check --all
 cargo clippy --workspace --all-targets --all-features 2>&1 | head -50
-cargo check
+cargo check --workspace
+cargo test --workspace --all-features
 ```
 
 ## Reporting Issues
 
-When reporting issues, please include:
+When reporting bugs, please include:
 
-- Operating system and version
-- Rust version (`rustc --version`)
-- DeepSeek TUI version (`deepseek --version`)
-- Steps to reproduce the issue
-- Expected vs actual behavior
-- Relevant error messages or logs
+- **OS and version** (macOS 12.5, Ubuntu 22.04, etc.)
+- **Rust version** (`rustc --version`, `cargo --version`)
+- **OMD version** (check `.omd-base-version` in repo root)
+- **Steps to reproduce** (exact commands)
+- **Expected vs. actual behavior**
+- **Relevant error logs** (use code blocks)
+- **Session state** (if applicable, contents of `~/.omd/sessions/*/current.json`)
+
+Example issue:
+
+```
+**Title:** Pangu crashes on cyclic task dependencies
+
+**Steps:**
+1. Run `deepseek-omd`
+2. Enter plan with circular task dependencies (A→B→C→A)
+3. Switch to Pangu executor
+
+**Expected:** Cycle detection error
+
+**Actual:** Panic at runtime::decompose:451
+
+**Error log:**
+```
+thread 'main' panicked at 'cycle in task graph', crates/omd/src/tasks.rs:451:13
+```
+
+**Environment:**
+- macOS 13.2, Rust 1.88, OMD at commit abc123
+```
 
 ## Code of Conduct
 
 Be respectful and inclusive. We welcome contributors of all backgrounds and experience levels.
 
+Discriminatory behavior, harassment, or bad faith will not be tolerated. See [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
 ## License
 
-By contributing to DeepSeek TUI, you agree that your contributions will be licensed under the MIT License.
+By contributing to OhMyDeepSeek, you agree that your contributions will be licensed under the MIT License.
+
+All contributions are considered under the terms of the repository's LICENSE file.
 
 ## Questions?
 
-Feel free to open an issue for any questions about contributing.
+- Open an issue for bug reports
+- Start a discussion for questions or design ideas
+- Ask in issues before starting large refactors
+
+Thank you for contributing! 🙏
+
