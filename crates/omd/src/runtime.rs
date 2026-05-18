@@ -189,8 +189,33 @@ impl OmdRuntimeState {
                 &self.session_state.session_id,
                 &event_json,
             );
+
+            // Check for permanent failure routing BEFORE dropping the graph borrow
+            let routing = if status_str == "Failed" {
+                graph.get(task_id).and_then(|task| {
+                    if task.attempts >= task.max_attempts {
+                        Some((task.max_attempts, task_id.to_string()))
+                    } else {
+                        None
+                    }
+                })
+            } else {
+                None
+            };
+
+            // Now safe to call &mut self methods
+            drop(graph);
             self.persist_state();
-            json!({"ok": true, "progress": format!("{}/{}", done, total)})
+
+            let mut result = json!({"ok": true, "progress": format!("{}/{}", done, total)});
+            if let Some((max_attempts, tid)) = routing {
+                result["routing_suggestion"] = json!("zhurong");
+                result["routing_reason"] = json!(format!(
+                    "Task '{}' permanently failed after {} attempts. Consider delegating to Zhurong for debugging.",
+                    tid, max_attempts
+                ));
+            }
+            result
         } else {
             json!({"ok": false, "error": "No task graph initialized"})
         }
