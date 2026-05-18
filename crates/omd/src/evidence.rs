@@ -143,16 +143,19 @@ pub fn verify_claim(
                 return Err("GitDiff must list at least one changed file".to_string());
             }
 
-            // Try `git diff --numstat HEAD` first; fall back to `git diff --numstat` (unstaged).
-            let stat_output = run_git_diff_stat(workspace, &["HEAD"])
-                .and_then(|out| {
-                    if out.trim().is_empty() {
-                        run_git_diff_stat(workspace, &[])
-                    } else {
-                        Ok(out)
+            // Try `git diff --numstat HEAD` first; fall back to unstaged.
+            // Track whether git is available to distinguish "clean repo" from "non-git env".
+            let (git_available, stat_output) = match run_git_diff_stat(workspace, &["HEAD"]) {
+                Ok(out) if out.trim().is_empty() => {
+                    // HEAD diff empty — try unstaged
+                    match run_git_diff_stat(workspace, &[]) {
+                        Ok(out2) => (true, out2),
+                        Err(_) => (true, String::new()),
                     }
-                })
-                .unwrap_or_default();
+                }
+                Ok(out) => (true, out),
+                Err(_) => (false, String::new()), // git not available
+            };
 
             let file_stats = parse_git_diff_stat(&stat_output);
 
@@ -180,8 +183,14 @@ pub fn verify_claim(
                     method: "git_diff_stat".to_string(),
                     stats: Some(GitDiffStats { files: file_stats }),
                 })
+            } else if git_available {
+                // Git is available but no changes detected — reject.
+                return Err(
+                    "No changes detected by git diff --numstat. GitDiff evidence requires \
+                     actual file changes visible to git.".to_string()
+                );
             } else {
-                // Fallback: filesystem existence check (covers non-git environments / tests).
+                // Git not available (non-git environment / tests) — filesystem fallback.
                 for path in changed_files {
                     let full = if Path::new(path).is_absolute() {
                         std::path::PathBuf::from(path)

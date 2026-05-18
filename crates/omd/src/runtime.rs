@@ -85,22 +85,25 @@ impl OmdRuntimeState {
         // Hydrate FSM at the recovered phase
         let fsm = OmdFsm::with_phase(agent, &effective_phase)?;
 
-        // Restore task_graph: prefer current.json (most complete), fall back to events replay.
-        let task_graph = session_state.task_graph.clone().or_else(|| {
-            event_state.as_ref().and_then(|s| s.task_graph.clone())
-        });
+        // Restore task_graph: events are authoritative for task STATUS (source of truth).
+        // Fall back to current.json only when events have no task data.
+        let task_graph = event_state.as_ref()
+            .and_then(|s| s.task_graph.clone())
+            .or_else(|| session_state.task_graph.clone());
 
-        // Update current.json if phase or task_graph was corrected
+        // Update current.json if state was corrected from events
         let mut corrected_state = session_state;
         let phase_changed = corrected_state.phase != effective_phase;
-        let graph_restored = corrected_state.task_graph.is_none() && task_graph.is_some();
+        // Graph is corrected if events produced one and current.json didn't have one,
+        // or if events are authoritative (we always prefer event-derived graph).
+        let graph_corrected = event_state.as_ref().and_then(|s| s.task_graph.as_ref()).is_some();
         if phase_changed {
             corrected_state.phase = effective_phase;
         }
-        if graph_restored {
+        if graph_corrected {
             corrected_state.task_graph = task_graph.clone();
         }
-        if phase_changed || graph_restored {
+        if phase_changed || graph_corrected {
             let _ = store.write_state(&corrected_state);
         }
 
@@ -340,13 +343,19 @@ impl OmdRuntimeState {
                 }
 
                 self.audit_log.clear();
-                json!({
+                let mut result = json!({
                     "ok": true,
                     "phase": to,
                     "message": format!("User forced transition from {} to {}. Tool availability updated.", from, to),
                     "tools_changed": true,
                     "user_initiated": true
-                })
+                });
+                // Include fuxi_handoff in return so engine can trigger the widget
+                if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
+                    result["fuxi_handoff"] = json!(true);
+                    result["plan_path"] = json!(".omd/plans/latest.md");
+                }
+                result
             }
             Err(e) => json!({
                 "ok": false,
