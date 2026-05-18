@@ -94,10 +94,12 @@ impl ToolSpec for OmdPhaseCompleteTool {
                     // Unparseable evidence — warn and skip instead of hard-failing.
                     // Models often send evidence in slightly wrong formats; this shouldn't
                     // block the entire phase transition.
-                    tracing::warn!(
-                        "Skipping unparseable evidence claim: {}",
-                        serde_json::to_string(ev_value).unwrap_or_else(|_| "???".to_string())
-                    );
+                    let raw = serde_json::to_string(ev_value).unwrap_or_else(|_| "???".to_string());
+                    tracing::warn!("Skipping unparseable evidence claim: {}", raw);
+                    // Debug log the skip for /omd-debug visibility
+                    let agent = format!("{:?}", state.fsm.agent());
+                    let phase = state.fsm.current_phase_name().to_string();
+                    state.debug_logger.log_evidence_skip(&agent, &phase, &raw);
                 }
             }
             drop(state); // Release read lock before acquiring write lock

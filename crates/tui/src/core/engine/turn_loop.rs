@@ -1062,6 +1062,15 @@ impl Engine {
                             state.fsm.current_phase_name()
                         };
                         if phase_name != "Done" {
+                            // Debug log the stall hint
+                            if let Ok(rt) = omd_rt.try_read() {
+                                rt.debug_logger.log_turn(
+                                    &format!("{:?}", rt.fsm.agent()),
+                                    phase_name,
+                                    "stall_hint",
+                                    json!("turn ended without omd_phase_complete"),
+                                );
+                            }
                             let _ = self
                                 .tx_event
                                 .send(Event::status(format!(
@@ -1158,6 +1167,18 @@ impl Engine {
                             "Tool '{}' is not available in {} phase. Allowed: {:?}. Call omd_phase_complete to transition first.",
                             tool_name, phase.name(), policy.allowed_list()
                         )));
+                        // Debug log the blocked tool call
+                        if let Some(ref omd_rt) = self.omd_runtime {
+                            if let Ok(rt) = omd_rt.try_read() {
+                                rt.debug_logger.log_tool_call(
+                                    &format!("{:?}", rt.fsm.agent()),
+                                    phase.name(),
+                                    &tool_name,
+                                    "blocked",
+                                    &format!("not in {} allowlist", phase.name()),
+                                );
+                            }
+                        }
                     }
                 }
 
@@ -1884,6 +1905,20 @@ impl Engine {
                             "tool_name": outcome.name.clone(),
                             "success": output.success,
                         }));
+                        // OMD debug log for successful tool calls
+                        if let Some(ref omd_phase) = omd_phase_snapshot {
+                            if let Some(ref omd_rt) = self.omd_runtime {
+                                if let Ok(rt) = omd_rt.try_read() {
+                                    rt.debug_logger.log_tool_call(
+                                        &format!("{:?}", rt.fsm.agent()),
+                                        omd_phase.name(),
+                                        &outcome.name,
+                                        if output.success { "ok" } else { "error" },
+                                        "",
+                                    );
+                                }
+                            }
+                        }
                         let output_for_context = compact_tool_result_for_context(
                             &self.session.model,
                             &outcome.name,

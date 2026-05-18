@@ -529,6 +529,12 @@ pub const COMMANDS: &[CommandInfo] = &[
     },
     // OMD commands
     CommandInfo {
+        name: "omd-debug",
+        aliases: &[],
+        usage: "/omd-debug",
+        description_id: MessageId::CmdOmdDebugDescription,
+    },
+    CommandInfo {
         name: "omd-execute",
         aliases: &["omd-exec"],
         usage: "/omd-execute [plan-path]",
@@ -654,6 +660,7 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
         "rlm" | "recursive" | "digui" => rlm(app, arg),
 
         // OMD commands
+        "omd-debug" => omd::omd_debug(app),
         "omd-execute" | "omd-exec" => omd::omd_execute(app, arg),
         "omd-phase-complete" | "omd-phase" => omd::omd_phase_complete(app, arg),
 

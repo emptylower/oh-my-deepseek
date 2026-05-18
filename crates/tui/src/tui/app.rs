@@ -1749,6 +1749,12 @@ impl App {
             return false;
         }
 
+        // OMD debug log: record mode switches between OMD modes
+        if previous_mode.is_omd() || mode.is_omd() {
+            let logger = omd::OmdDebugLogger::new(&self.workspace);
+            logger.log_mode_switch(previous_mode.label(), mode.label());
+        }
+
         let entering_yolo = mode == AppMode::Yolo && previous_mode != AppMode::Yolo;
         let leaving_yolo = previous_mode == AppMode::Yolo && mode != AppMode::Yolo;
         self.mode = mode;

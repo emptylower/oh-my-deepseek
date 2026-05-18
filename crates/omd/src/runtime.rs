@@ -1,3 +1,4 @@
+use crate::debug::OmdDebugLogger;
 use crate::fsm::OmdFsm;
 use crate::state::{OmdSessionState, OmdStateStore};
 use crate::tasks::{Task, TaskGraph, TaskStatus};
@@ -23,6 +24,8 @@ pub struct OmdRuntimeState {
     /// Shell commands executed in current phase (for evidence verification).
     /// Cleared on each successful phase transition.
     pub audit_log: Vec<(String, i32)>,
+    /// Debug logger writing to `.omd/debug.jsonl`.
+    pub debug_logger: OmdDebugLogger,
 }
 
 impl OmdRuntimeState {
@@ -31,6 +34,7 @@ impl OmdRuntimeState {
         let fsm = OmdFsm::new(agent);
         let session_state = OmdSessionState::new(agent, session_id);
         let store = OmdStateStore::new(workspace);
+        let debug_logger = OmdDebugLogger::new(workspace);
         // Fail-closed: check stale lock + acquire
         store.check_stale_lock().map_err(|e| e.to_string())?;
         store.acquire_lock().map_err(|e| format!("Cannot acquire OMD session lock: {}", e))?;
@@ -39,7 +43,13 @@ impl OmdRuntimeState {
             &session_state.session_id,
             &json!({"ts": Utc::now().to_rfc3339(), "event": "session_start", "agent": format!("{:?}", agent), "phase": session_state.phase}),
         );
-        Ok(Self { fsm, session_state, store, task_graph: None, audit_log: Vec::new() })
+        debug_logger.log(json!({
+            "event": "session_start",
+            "agent": format!("{:?}", agent),
+            "phase": session_state.phase,
+            "session_id": session_state.session_id,
+        }));
+        Ok(Self { fsm, session_state, store, task_graph: None, audit_log: Vec::new(), debug_logger })
     }
 
     /// Create a SharedOmdRuntime (the type tools will hold)
@@ -51,6 +61,7 @@ impl OmdRuntimeState {
     /// Acquires lock, hydrates FSM to the persisted phase, restores task_graph.
     pub fn resume(workspace: &Path, session_state: OmdSessionState) -> Result<Self, String> {
         let store = OmdStateStore::new(workspace);
+        let debug_logger = OmdDebugLogger::new(workspace);
         store.check_stale_lock().map_err(|e| e.to_string())?;
         store.acquire_lock().map_err(|e| format!("Cannot acquire lock: {}", e))?;
 
@@ -127,12 +138,20 @@ impl OmdRuntimeState {
             let _ = store.write_state(&corrected_state);
         }
 
+        debug_logger.log(json!({
+            "event": "session_resume",
+            "agent": corrected_state.agent,
+            "phase": corrected_state.phase,
+            "session_id": corrected_state.session_id,
+        }));
+
         Ok(Self {
             fsm,
             session_state: corrected_state,
             store,
             task_graph,
             audit_log: Vec::new(),
+            debug_logger,
         })
     }
 
@@ -262,6 +281,7 @@ impl OmdRuntimeState {
             }
         }
 
+        let agent_name = format!("{:?}", self.fsm.agent());
         match self.fsm.try_transition(next_phase) {
             Ok(()) => {
                 let to = self.fsm.current_phase_name();
@@ -271,6 +291,7 @@ impl OmdRuntimeState {
                     &self.session_state,
                     &json!({"ts": Utc::now().to_rfc3339(), "event": "phase_transition", "from": from, "to": to, "reason": reason, "evidence": evidence}),
                 );
+                self.debug_logger.log_phase_transition(&agent_name, &from, to, true, reason);
                 // Fuxi handoff event: emit when Fuxi finishes planning (Plan→Done)
                 let fuxi_handoff_plan_path = if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
                     let plan_path = evidence.iter()
@@ -299,7 +320,10 @@ impl OmdRuntimeState {
                 }
                 result
             }
-            Err(e) => json!({"ok": false, "error": e, "current_phase": from, "valid_next_phases": self.fsm.valid_next_phases()}),
+            Err(e) => {
+                self.debug_logger.log_phase_transition(&agent_name, &from, next_phase, false, &e);
+                json!({"ok": false, "error": e, "current_phase": from, "valid_next_phases": self.fsm.valid_next_phases()})
+            }
         }
     }
 
@@ -325,6 +349,7 @@ impl OmdRuntimeState {
         }
 
         // 1. FSM validity (same as handle_phase_complete)
+        let agent_name = format!("{:?}", self.fsm.agent());
         match self.fsm.try_transition(next_phase) {
             Ok(()) => {
                 let to = self.fsm.current_phase_name();
@@ -348,6 +373,7 @@ impl OmdRuntimeState {
                         "user_initiated": true
                     }),
                 );
+                self.debug_logger.log_phase_transition(&agent_name, &from, to, true, "user-initiated");
 
                 // Fuxi handoff (same as normal)
                 if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
@@ -378,12 +404,15 @@ impl OmdRuntimeState {
                 }
                 result
             }
-            Err(e) => json!({
-                "ok": false,
-                "error": e,
-                "current_phase": from,
-                "valid_next_phases": self.fsm.valid_next_phases()
-            }),
+            Err(e) => {
+                self.debug_logger.log_phase_transition(&agent_name, &from, next_phase, false, &e);
+                json!({
+                    "ok": false,
+                    "error": e,
+                    "current_phase": from,
+                    "valid_next_phases": self.fsm.valid_next_phases()
+                })
+            }
         }
     }
 

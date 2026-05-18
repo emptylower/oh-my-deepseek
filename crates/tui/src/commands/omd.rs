@@ -1,7 +1,57 @@
-//! OMD slash commands: /omd-execute and /omd-phase-complete
+//! OMD slash commands: /omd-debug, /omd-execute, and /omd-phase-complete
 
 use crate::tui::app::{App, AppAction, AppMode};
 use super::CommandResult;
+
+/// Handle /omd-debug
+/// Reads `.omd/debug.jsonl` and the current session state, then displays
+/// a formatted summary of recent OMD events for debugging.
+pub fn omd_debug(app: &mut App) -> CommandResult {
+    let workspace = &app.workspace;
+    let debug_logger = omd::OmdDebugLogger::new(workspace);
+
+    // Try to read current session state for context
+    let store = omd::state::OmdStateStore::new(workspace);
+    let (agent, phase, session_id, started_at, available_tools_owned) = match store.read_state() {
+        Ok(Some(state)) => {
+            // Resolve available tools from the phase policy
+            let phase_obj = omd::types::OmdPhase::from_agent_and_name(&state.agent, &state.phase);
+            let tools: Vec<String> = if let Some(ref p) = phase_obj {
+                omd::PhaseToolPolicy::for_phase(p)
+                    .allowed_list()
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            (state.agent, state.phase, state.session_id, state.started_at, tools)
+        }
+        _ => {
+            // No active session — still show the debug log if it exists
+            let entries = debug_logger.recent_entries(20);
+            if entries.is_empty() {
+                return CommandResult::message(
+                    "=== OMD Debug Status ===\nNo active OMD session and no debug events found.\n\
+                     Start an OMD mode to begin logging."
+                );
+            }
+            ("unknown".to_string(), "unknown".to_string(), "none".to_string(),
+             "unknown".to_string(), Vec::new())
+        }
+    };
+
+    let available_tools: Vec<&str> = available_tools_owned.iter().map(|s| s.as_str()).collect();
+    let summary = debug_logger.format_summary(
+        &agent,
+        &phase,
+        &session_id,
+        &started_at,
+        &available_tools,
+    );
+
+    CommandResult::message(summary)
+}
 
 /// Handle /omd-execute [plan-name]
 /// Switches to OmdPangu mode and shows the plan path.
