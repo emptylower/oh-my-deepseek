@@ -91,13 +91,13 @@ impl ToolSpec for OmdPhaseCompleteTool {
                         }
                     }
                 } else {
-                    // Reject unparseable evidence — all evidence must be typed
-                    return Err(ToolError::execution_failed(format!(
-                        "Evidence claim could not be parsed as a valid EvidenceClaim type. \
-                         Each evidence item must have a 'type' field (FileDiscovery, TestResult, \
-                         GitDiff, PlanArtifact, or ExplicitSkip). Got: {}",
+                    // Unparseable evidence — warn and skip instead of hard-failing.
+                    // Models often send evidence in slightly wrong formats; this shouldn't
+                    // block the entire phase transition.
+                    tracing::warn!(
+                        "Skipping unparseable evidence claim: {}",
                         serde_json::to_string(ev_value).unwrap_or_else(|_| "???".to_string())
-                    )));
+                    );
                 }
             }
             drop(state); // Release read lock before acquiring write lock
