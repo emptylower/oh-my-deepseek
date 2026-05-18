@@ -227,4 +227,84 @@ impl OmdStateStore {
         }
         last_phase
     }
+
+    /// Full state reconstruction from events.jsonl.
+    /// Replays all events to reconstruct: agent, phase, and task_graph.
+    pub fn rebuild_full_state_from_events(&self, session_id: &str) -> Option<OmdSessionState> {
+        let path = self.base_dir.join(session_id).join("events.jsonl");
+        if !path.exists() {
+            return None;
+        }
+        let content = fs::read_to_string(&path).ok()?;
+
+        let mut agent: Option<String> = None;
+        let mut phase: Option<String> = None;
+        let mut task_graph: Option<TaskGraph> = None;
+        let mut started_at: Option<String> = None;
+
+        for line in content.lines() {
+            let event: Value = match serde_json::from_str(line) {
+                Ok(v) => v,
+                Err(_) => continue,
+            };
+
+            match event.get("event").and_then(|v| v.as_str()) {
+                Some("session_start") => {
+                    agent = event.get("agent").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    phase = event.get("phase").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    started_at = event.get("ts").and_then(|v| v.as_str()).map(|s| s.to_string());
+                }
+                Some("phase_transition") => {
+                    if let Some(to) = event.get("to").and_then(|v| v.as_str()) {
+                        phase = Some(to.to_string());
+                    }
+                }
+                Some("task_update") => {
+                    // Rebuild task graph from task_update events.
+                    // First appearance of a task carries the full task definition.
+                    if let Some(task_json) = event.get("task_definition") {
+                        if let Ok(task) = serde_json::from_value::<crate::tasks::Task>(task_json.clone()) {
+                            let graph = task_graph.get_or_insert_with(TaskGraph::new);
+                            // Only add if task ID is not already in the graph.
+                            if graph.get(&task.id).is_none() {
+                                graph.add_task(task);
+                            }
+                        }
+                    }
+                    // Apply status update.
+                    if let Some(task_id) = event.get("task_id").and_then(|v| v.as_str()) {
+                        if let Some(status_str) = event.get("status").and_then(|v| v.as_str()) {
+                            if let Some(ref mut graph) = task_graph {
+                                let status = match status_str {
+                                    "Pending" => Some(crate::tasks::TaskStatus::Pending),
+                                    "Active" => Some(crate::tasks::TaskStatus::Active),
+                                    "Done" => Some(crate::tasks::TaskStatus::Done),
+                                    "Failed" => Some(crate::tasks::TaskStatus::Failed),
+                                    "Blocked" => Some(crate::tasks::TaskStatus::Blocked),
+                                    _ => None,
+                                };
+                                if let Some(s) = status {
+                                    let _ = graph.set_status(task_id, s);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {} // checkpoint, fuxi_handoff, etc. don't affect core state
+            }
+        }
+
+        let agent_str = agent?;
+        let phase_str = phase?;
+
+        Some(OmdSessionState {
+            schema_version: 1,
+            agent: agent_str,
+            phase: phase_str,
+            started_at: started_at.unwrap_or_default(),
+            updated_at: Utc::now().to_rfc3339(),
+            session_id: session_id.to_string(),
+            task_graph,
+        })
+    }
 }

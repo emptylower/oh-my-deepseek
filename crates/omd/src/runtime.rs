@@ -4,6 +4,8 @@ use crate::tasks::{Task, TaskGraph, TaskStatus};
 use crate::types::OmdAgent;
 use chrono::Utc;
 use serde_json::{json, Value};
+use std::cmp::Reverse;
+use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -52,9 +54,24 @@ impl OmdRuntimeState {
         store.check_stale_lock().map_err(|e| e.to_string())?;
         store.acquire_lock().map_err(|e| format!("Cannot acquire lock: {}", e))?;
 
-        // Determine the correct phase: prefer events.jsonl over current.json
-        let effective_phase = store.rebuild_from_events(&session_state.session_id)
+        // Full state from events — gives us the authoritative phase and task_graph.
+        let event_state = store.rebuild_full_state_from_events(&session_state.session_id);
+
+        // Determine the correct phase: prefer events.jsonl over current.json.
+        let effective_phase = event_state
+            .as_ref()
+            .map(|s| s.phase.clone())
+            .or_else(|| store.rebuild_from_events(&session_state.session_id))
             .unwrap_or_else(|| session_state.phase.clone());
+
+        if effective_phase != session_state.phase {
+            tracing::warn!(
+                session_id = %session_state.session_id,
+                current_json_phase = %session_state.phase,
+                event_phase = %effective_phase,
+                "Phase mismatch between current.json and events.jsonl — using event-derived phase"
+            );
+        }
 
         // Determine the agent from the session state
         let agent = match session_state.agent.as_str() {
@@ -68,13 +85,22 @@ impl OmdRuntimeState {
         // Hydrate FSM at the recovered phase
         let fsm = OmdFsm::with_phase(agent, &effective_phase)?;
 
-        // Restore task_graph from session_state (persisted in current.json)
-        let task_graph = session_state.task_graph.clone();
+        // Restore task_graph: prefer current.json (most complete), fall back to events replay.
+        let task_graph = session_state.task_graph.clone().or_else(|| {
+            event_state.as_ref().and_then(|s| s.task_graph.clone())
+        });
 
-        // Update current.json if phase was corrected
+        // Update current.json if phase or task_graph was corrected
         let mut corrected_state = session_state;
-        if corrected_state.phase != effective_phase {
+        let phase_changed = corrected_state.phase != effective_phase;
+        let graph_restored = corrected_state.task_graph.is_none() && task_graph.is_some();
+        if phase_changed {
             corrected_state.phase = effective_phase;
+        }
+        if graph_restored {
+            corrected_state.task_graph = task_graph.clone();
+        }
+        if phase_changed || graph_restored {
             let _ = store.write_state(&corrected_state);
         }
 
@@ -125,6 +151,15 @@ impl OmdRuntimeState {
     ) -> Value {
         if let Some(ref mut graph) = self.task_graph {
             let status_str = format!("{:?}", status);
+
+            // Capture task definition before mutating (for event replay).
+            // Include on first non-Pending status change so replay can reconstruct tasks.
+            let task_definition = if !matches!(status, TaskStatus::Pending) {
+                graph.get(task_id).and_then(|t| serde_json::to_value(t).ok())
+            } else {
+                None
+            };
+
             if let Err(e) = graph.set_status(task_id, status) {
                 return json!({"ok": false, "error": e});
             }
@@ -135,16 +170,23 @@ impl OmdRuntimeState {
                 }
             }
             let (done, total) = graph.progress();
+
+            let mut event_json = json!({
+                "ts": Utc::now().to_rfc3339(),
+                "event": "task_update",
+                "task_id": task_id,
+                "status": status_str,
+                "done": done,
+                "total": total
+            });
+            // Include full task definition for event replay (crash recovery).
+            if let Some(def) = task_definition {
+                event_json["task_definition"] = def;
+            }
+
             let _ = self.store.append_event(
                 &self.session_state.session_id,
-                &json!({
-                    "ts": Utc::now().to_rfc3339(),
-                    "event": "task_update",
-                    "task_id": task_id,
-                    "status": status_str,
-                    "done": done,
-                    "total": total
-                }),
+                &event_json,
             );
             self.persist_state();
             json!({"ok": true, "progress": format!("{}/{}", done, total)})
@@ -269,12 +311,43 @@ impl OmdRuntimeState {
 
     /// Check if there's an unfinished session at the given workspace.
     /// Used by Hongjun on startup to suggest resumption.
+    /// Falls back to scanning session directories when current.json is missing or corrupt.
     pub fn detect_unfinished_session(workspace: &Path) -> Option<OmdSessionState> {
         let store = OmdStateStore::new(workspace);
+
+        // Primary: try current.json
         match store.read_state() {
-            Ok(Some(state)) if state.phase != "Done" => Some(state),
-            _ => None,
+            Ok(Some(state)) if state.phase != "Done" => return Some(state),
+            Ok(Some(_)) => return None, // phase == Done, no resume needed
+            _ => {}                     // missing or corrupt — fall through to scan
         }
+
+        // Fallback: scan session directories for one with events.jsonl
+        let sessions_dir = workspace.join(".omd").join("sessions");
+        if !sessions_dir.exists() {
+            return None;
+        }
+
+        // Find most recent session directory (by modification time)
+        let mut entries: Vec<_> = fs::read_dir(&sessions_dir)
+            .ok()?
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir() && e.path().join("events.jsonl").exists())
+            .collect();
+        entries.sort_by_key(|e| {
+            Reverse(e.metadata().ok().and_then(|m| m.modified().ok()))
+        });
+
+        if let Some(entry) = entries.first() {
+            let session_id = entry.file_name().to_string_lossy().to_string();
+            if let Some(state) = store.rebuild_full_state_from_events(&session_id) {
+                if state.phase != "Done" {
+                    return Some(state);
+                }
+            }
+        }
+
+        None
     }
 
     /// Handle omd_checkpoint
@@ -430,5 +503,132 @@ mod tests {
         let result = rt.handle_user_phase_complete("Done");
         assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
         assert_eq!(result.get("phase"), Some(&serde_json::json!("Done")));
+    }
+
+    // ── Contract 5: crash recovery tests ────────────────────────────────────
+
+    #[test]
+    fn detect_unfinished_session_falls_back_to_events_when_current_json_missing() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path();
+        let store = OmdStateStore::new(workspace);
+        let sid = "crash-session";
+
+        // Write session_start and a phase_transition event (no current.json)
+        store.append_event(sid, &json!({
+            "ts": "2024-01-01T00:00:00Z",
+            "event": "session_start",
+            "agent": "Tongtian",
+            "phase": "Explore"
+        })).unwrap();
+        store.append_event(sid, &json!({
+            "ts": "2024-01-01T00:01:00Z",
+            "event": "phase_transition",
+            "from": "Explore",
+            "to": "Execute"
+        })).unwrap();
+
+        // No current.json written — detect should fall back to events scan
+        let detected = OmdRuntimeState::detect_unfinished_session(workspace);
+        assert!(detected.is_some(), "should detect session from events.jsonl");
+        let state = detected.unwrap();
+        assert_eq!(state.phase, "Execute");
+        assert_eq!(state.agent, "Tongtian");
+    }
+
+    #[test]
+    fn detect_unfinished_session_returns_none_when_phase_is_done() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path();
+        let store = OmdStateStore::new(workspace);
+        let sid = "done-session";
+
+        store.append_event(sid, &json!({
+            "ts": "2024-01-01T00:00:00Z",
+            "event": "session_start",
+            "agent": "Tongtian",
+            "phase": "Explore"
+        })).unwrap();
+        store.append_event(sid, &json!({
+            "ts": "2024-01-01T00:01:00Z",
+            "event": "phase_transition",
+            "from": "Explore",
+            "to": "Done"
+        })).unwrap();
+
+        let detected = OmdRuntimeState::detect_unfinished_session(workspace);
+        assert!(detected.is_none(), "Done sessions should not be detected as unfinished");
+    }
+
+    #[test]
+    fn task_update_includes_task_definition_on_first_nontrivial_status() {
+        let (mut rt, tmp) = make_runtime(OmdAgent::Pangu);
+        let sid = rt.session_state.session_id.clone();
+
+        // Initialize a task graph
+        let task = crate::tasks::Task::new("impl-1", "implement feature");
+        rt.init_task_graph(vec![task]).unwrap();
+
+        // Transition task to Active (first non-Pending status)
+        let result = rt.handle_task_update(
+            "impl-1",
+            TaskStatus::Active,
+            vec![],
+            None,
+        );
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
+
+        // Verify the emitted event contains task_definition
+        let events_path = tmp.path()
+            .join(".omd/sessions")
+            .join(&sid)
+            .join("events.jsonl");
+        let content = std::fs::read_to_string(&events_path).unwrap();
+        let task_update_event = content
+            .lines()
+            .filter_map(|l| serde_json::from_str::<serde_json::Value>(l).ok())
+            .find(|e| e.get("event").and_then(|v| v.as_str()) == Some("task_update"))
+            .expect("task_update event should exist");
+
+        assert!(
+            task_update_event.get("task_definition").is_some(),
+            "task_update event should include task_definition on first status change"
+        );
+        assert_eq!(
+            task_update_event["task_definition"]["id"].as_str(),
+            Some("impl-1")
+        );
+    }
+
+    #[test]
+    fn resume_restores_task_graph_from_events_when_current_json_missing_graph() {
+        let tmp = TempDir::new().unwrap();
+        let workspace = tmp.path();
+
+        // Simulate a session: create runtime, add tasks, then wipe task_graph from current.json
+        {
+            let mut rt = OmdRuntimeState::new(OmdAgent::Pangu, workspace).unwrap();
+            let _sid = rt.session_state.session_id.clone();
+            let task = crate::tasks::Task::new("t-resume", "resumable task");
+            rt.init_task_graph(vec![task]).unwrap();
+
+            // Mark it Active (emits task_definition in event)
+            rt.handle_task_update("t-resume", TaskStatus::Active, vec![], None);
+
+            // Simulate corrupt current.json by stripping task_graph from it
+            let store = OmdStateStore::new(workspace);
+            let mut state = store.read_state().unwrap().unwrap();
+            state.task_graph = None;
+            store.write_state(&state).unwrap();
+        }
+
+        // Now resume — should restore task_graph from events
+        let store = OmdStateStore::new(workspace);
+        let state_from_disk = store.read_state().unwrap().unwrap();
+        assert!(state_from_disk.task_graph.is_none(), "task_graph was wiped");
+
+        let resumed = OmdRuntimeState::resume(workspace, state_from_disk).unwrap();
+        let graph = resumed.task_graph.clone().expect("resume should restore task_graph from events");
+        assert!(graph.get("t-resume").is_some(), "task should be in restored graph");
     }
 }
