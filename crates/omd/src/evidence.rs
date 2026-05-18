@@ -13,7 +13,7 @@ pub enum EvidenceClaim {
     ExplicitSkip { reason: String },
 }
 
-/// Per-file statistics from `git diff --stat`.
+/// Per-file statistics from `git diff --numstat`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileStat {
     pub path: String,
@@ -21,7 +21,7 @@ pub struct FileStat {
     pub deletions: u32,
 }
 
-/// Aggregated stats from a `git diff --stat` run.
+/// Aggregated stats from a `git diff --numstat` run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GitDiffStats {
     pub files: Vec<FileStat>,
@@ -42,66 +42,40 @@ pub struct VerifiedEvidence {
     pub result: VerificationResult,
 }
 
-/// Parse `git diff --stat` output into a list of `FileStat` entries.
-///
-/// Expected format per file line:
-/// ` src/main.rs | 15 +++++++++------`
-/// Summary line (contains "changed") is skipped.
-/// Binary file lines (`Bin 0 -> N bytes`) yield insertions=0, deletions=0.
-/// Renamed files (`{old => new}`) — the resolved path from git is used as-is.
-pub fn parse_git_diff_stat(output: &str) -> Vec<FileStat> {
-    let mut result = Vec::new();
-
-    for line in output.lines() {
-        let trimmed = line.trim();
-
-        // Skip the summary line, e.g. "3 files changed, 14 insertions(+), 9 deletions(-)"
-        if trimmed.contains("changed") {
-            continue;
-        }
-
-        // Each file line must contain a `|`
-        let pipe_pos = match trimmed.find('|') {
-            Some(p) => p,
-            None => continue,
-        };
-
-        let raw_path = trimmed[..pipe_pos].trim().to_string();
-        if raw_path.is_empty() {
-            continue;
-        }
-
-        let after_pipe = trimmed[pipe_pos + 1..].trim();
-
-        // Binary file line: "Bin 0 -> 1234 bytes"
-        if after_pipe.starts_with("Bin") {
-            result.push(FileStat {
-                path: raw_path,
-                insertions: 0,
-                deletions: 0,
-            });
-            continue;
-        }
-
-        // Normal line: "15 +++++++++------"
-        // Count `+` and `-` characters that appear after the numeric count.
-        let insertions = after_pipe.chars().filter(|&c| c == '+').count() as u32;
-        let deletions = after_pipe.chars().filter(|&c| c == '-').count() as u32;
-
-        result.push(FileStat {
-            path: raw_path,
-            insertions,
-            deletions,
-        });
-    }
-
-    result
+/// Strip a leading `./` from a path for normalization.
+fn normalize_path(p: &str) -> &str {
+    p.strip_prefix("./").unwrap_or(p)
 }
 
-/// Run `git diff --stat` in `workspace` and return the raw stdout, or an error string.
+/// Parse `git diff --numstat` output into a list of `FileStat` entries.
+///
+/// Expected format per line (tab-separated):
+/// `9\t6\tsrc/main.rs`
+/// Binary files are reported as `-\t-\tpath` and yield insertions=0, deletions=0.
+pub fn parse_git_diff_stat(output: &str) -> Vec<FileStat> {
+    let mut files = Vec::new();
+    for line in output.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(3, '\t').collect();
+        if parts.len() != 3 {
+            continue;
+        }
+        // Binary files have "-" for insertions/deletions; parse::<u32>() returns Err → 0.
+        let insertions = parts[0].parse::<u32>().unwrap_or(0);
+        let deletions = parts[1].parse::<u32>().unwrap_or(0);
+        let path = parts[2].to_string();
+        files.push(FileStat { path, insertions, deletions });
+    }
+    files
+}
+
+/// Run `git diff --numstat` in `workspace` and return the raw stdout, or an error string.
 fn run_git_diff_stat(workspace: &Path, args: &[&str]) -> Result<String, String> {
     let mut cmd = std::process::Command::new("git");
-    cmd.arg("diff").arg("--stat");
+    cmd.arg("diff").arg("--numstat");
     for arg in args {
         cmd.arg(arg);
     }
@@ -113,7 +87,7 @@ fn run_git_diff_stat(workspace: &Path, args: &[&str]) -> Result<String, String> 
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("git diff --stat failed: {}", stderr));
+        return Err(format!("git diff --numstat failed: {}", stderr));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
@@ -169,7 +143,7 @@ pub fn verify_claim(
                 return Err("GitDiff must list at least one changed file".to_string());
             }
 
-            // Try `git diff --stat HEAD` first; fall back to `git diff --stat` (unstaged).
+            // Try `git diff --numstat HEAD` first; fall back to `git diff --numstat` (unstaged).
             let stat_output = run_git_diff_stat(workspace, &["HEAD"])
                 .and_then(|out| {
                     if out.trim().is_empty() {
@@ -183,7 +157,7 @@ pub fn verify_claim(
             let file_stats = parse_git_diff_stat(&stat_output);
 
             // Verify each claimed file appears in the actual diff output.
-            // When git diff --stat produced results, require each claimed file to be listed.
+            // When git diff --numstat produced results, require each claimed file to be listed.
             // When no diff output is available (e.g. not a git repo in tests), fall back to
             // filesystem existence check so existing tests keep passing.
             if !file_stats.is_empty() {
@@ -191,17 +165,12 @@ pub fn verify_claim(
                     file_stats.iter().map(|f| f.path.as_str()).collect();
 
                 for claimed in changed_files {
-                    // Normalize: strip leading "./" if present
-                    let normalized = claimed.trim_start_matches("./");
-                    // Accept either an exact match or a suffix match (for absolute paths)
-                    let found = stat_paths.iter().any(|p| {
-                        *p == normalized
-                            || normalized.ends_with(p)
-                            || p.ends_with(normalized)
-                    });
+                    // Normalize: strip leading "./" if present, then require an exact match.
+                    let claimed_norm = normalize_path(claimed.trim_start_matches("./"));
+                    let found = stat_paths.iter().any(|p| normalize_path(p) == claimed_norm);
                     if !found {
                         return Err(format!(
-                            "Claimed changed file '{}' not found in git diff --stat output",
+                            "Claimed changed file '{}' not found in git diff --numstat output",
                             claimed
                         ));
                     }
@@ -224,7 +193,7 @@ pub fn verify_claim(
                     }
                 }
                 Ok(VerificationResult::Verified {
-                    method: "git_diff_stat".to_string(),
+                    method: "fs_exists_fallback".to_string(),
                     stats: None,
                 })
             }
@@ -263,12 +232,7 @@ mod tests {
 
     #[test]
     fn parse_normal_multi_file_output() {
-        let output = "\
- src/main.rs    | 15 +++++++++------
- src/lib.rs     |  3 +++
- tests/test.rs  |  8 +++++---
- 3 files changed, 14 insertions(+), 9 deletions(-)
-";
+        let output = "9\t6\tsrc/main.rs\n3\t0\tsrc/lib.rs\n8\t3\ttests/test.rs\n";
         let stats = parse_git_diff_stat(output);
         assert_eq!(stats.len(), 3);
 
@@ -281,16 +245,13 @@ mod tests {
         assert_eq!(stats[1].deletions, 0);
 
         assert_eq!(stats[2].path, "tests/test.rs");
-        assert_eq!(stats[2].insertions, 5);
+        assert_eq!(stats[2].insertions, 8);
         assert_eq!(stats[2].deletions, 3);
     }
 
     #[test]
     fn parse_binary_file_line() {
-        let output = "\
- assets/image.png | Bin 0 -> 1234 bytes
- 1 file changed, 0 insertions(+), 0 deletions(-)
-";
+        let output = "-\t-\tassets/image.png\n";
         let stats = parse_git_diff_stat(output);
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].path, "assets/image.png");
@@ -306,7 +267,7 @@ mod tests {
 
     #[test]
     fn parse_single_file() {
-        let output = " README.md | 2 +-\n 1 file changed, 1 insertion(+), 1 deletion(-)\n";
+        let output = "1\t1\tREADME.md\n";
         let stats = parse_git_diff_stat(output);
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].path, "README.md");
@@ -316,8 +277,8 @@ mod tests {
 
     #[test]
     fn parse_file_with_spaces_in_name() {
-        // git diff --stat can show files with spaces in paths
-        let output = " src/my file.rs | 4 ++++\n 1 file changed, 4 insertions(+), 0 deletions(-)\n";
+        // git diff --numstat preserves spaces in file paths
+        let output = "4\t0\tsrc/my file.rs\n";
         let stats = parse_git_diff_stat(output);
         assert_eq!(stats.len(), 1);
         assert_eq!(stats[0].path, "src/my file.rs");
@@ -327,7 +288,8 @@ mod tests {
 
     #[test]
     fn parse_only_summary_line_yields_empty() {
-        let output = " 3 files changed, 14 insertions(+), 9 deletions(-)\n";
+        // With --numstat there is no summary line, but a non-tab line should be skipped gracefully.
+        let output = "some random line without tabs\n";
         let stats = parse_git_diff_stat(output);
         assert!(stats.is_empty());
     }
