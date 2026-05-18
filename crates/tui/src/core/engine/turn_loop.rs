@@ -1044,6 +1044,35 @@ impl Engine {
                     continue;
                 }
 
+                // OMD phase stall hint (Task 10 — Stall Handling).
+                // When the model's turn ends (no tool calls) inside an OMD mode
+                // without having called `omd_phase_complete`, emit a one-time hint
+                // so the model knows how to advance the phase on the next turn.
+                // We skip the hint when already in the "Done" phase.
+                if matches!(
+                    mode,
+                    AppMode::OmdTongtian
+                        | AppMode::OmdFuxi
+                        | AppMode::OmdPangu
+                        | AppMode::OmdHongjun
+                ) {
+                    if let Some(ref omd_rt) = self.omd_runtime {
+                        let phase_name = {
+                            let state = tokio::task::block_in_place(|| omd_rt.blocking_read());
+                            state.fsm.current_phase_name()
+                        };
+                        if phase_name != "Done" {
+                            let _ = self
+                                .tx_event
+                                .send(Event::status(format!(
+                                    "[OMD hint] Current phase: {}. When done, call omd_phase_complete to proceed.",
+                                    phase_name
+                                )))
+                                .await;
+                        }
+                    }
+                }
+
                 break;
             }
 
