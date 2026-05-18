@@ -1,6 +1,6 @@
 //! OMD slash commands: /omd-execute and /omd-phase-complete
 
-use crate::tui::app::{App, AppMode};
+use crate::tui::app::{App, AppAction, AppMode};
 use super::CommandResult;
 
 /// Handle /omd-execute [plan-name]
@@ -31,25 +31,19 @@ pub fn omd_execute(app: &mut App, arg: Option<&str>) -> CommandResult {
 }
 
 /// Handle /omd-phase-complete [target_phase]
-/// User escape hatch for stalled phases.
+/// User escape hatch for stalled phases. Bypasses evidence verification
+/// but enforces FSM validity and structural transition guards.
 pub fn omd_phase_complete(app: &mut App, arg: Option<&str>) -> CommandResult {
     if !matches!(app.mode, AppMode::OmdTongtian | AppMode::OmdFuxi | AppMode::OmdPangu | AppMode::OmdHongjun) {
         return CommandResult::error("Not in an OMD mode. Switch to an OMD mode first.");
     }
 
     match arg {
-        Some(target) => {
-            // Inject a message for the model to call omd_phase_complete
-            CommandResult::message(format!(
-                "Phase transition requested: target='{}'. The model will call omd_phase_complete tool to execute the transition.",
-                target.trim()
-            ))
-        }
-        None => {
-            CommandResult::message(
-                "Usage: /omd-phase-complete <target_phase>. This is an escape hatch for stalled phases."
-                    .to_string()
-            )
-        }
+        Some(target) => CommandResult::action(AppAction::OmdPhaseComplete {
+            target_phase: target.trim().to_string(),
+        }),
+        None => CommandResult::error(
+            "Usage: /omd-phase-complete <target_phase>. This is an escape hatch for stalled phases."
+        ),
     }
 }

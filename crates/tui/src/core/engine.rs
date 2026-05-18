@@ -809,6 +809,22 @@ impl Engine {
                     )
                     .await;
                 }
+                Op::OmdUserPhaseComplete { target_phase } => {
+                    let msg = if let Some(ref rt) = self.omd_runtime {
+                        let mut state = rt.write().await;
+                        let result = state.handle_user_phase_complete(&target_phase);
+                        if result.get("ok") == Some(&serde_json::json!(true)) {
+                            let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("Phase transition complete.");
+                            format!("[OMD] {}", message)
+                        } else {
+                            let error = result.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error");
+                            format!("[OMD] Phase transition failed: {}", error)
+                        }
+                    } else {
+                        "[OMD] No active OMD runtime. Send a message first to initialize the session.".to_string()
+                    };
+                    let _ = self.tx_event.send(Event::status(msg)).await;
+                }
                 Op::Shutdown => {
                     break;
                 }

@@ -80,6 +80,9 @@ pub enum Op {
     #[allow(dead_code)]
     EditLastTurn { new_message: String },
 
+    /// User-initiated OMD phase complete (bypasses evidence, enforces FSM)
+    OmdUserPhaseComplete { target_phase: String },
+
     /// Shutdown the engine
     Shutdown,
 }

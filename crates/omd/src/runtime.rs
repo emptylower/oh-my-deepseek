@@ -190,6 +190,67 @@ impl OmdRuntimeState {
         }
     }
 
+    /// User-initiated phase complete (via /omd-phase-complete).
+    /// Bypasses evidence verification but enforces FSM + structural guards.
+    pub fn handle_user_phase_complete(&mut self, next_phase: &str) -> Value {
+        let from = self.fsm.current_phase_name().to_string();
+
+        // 1. FSM validity (same as handle_phase_complete)
+        match self.fsm.try_transition(next_phase) {
+            Ok(()) => {
+                let to = self.fsm.current_phase_name();
+                self.session_state.update_phase(to);
+
+                // Insert ExplicitSkip evidence automatically
+                let evidence = vec![json!({
+                    "type": "ExplicitSkip",
+                    "reason": "User-initiated via /omd-phase-complete"
+                })];
+
+                let _ = self.store.write_state_with_event(
+                    &self.session_state,
+                    &json!({
+                        "ts": Utc::now().to_rfc3339(),
+                        "event": "phase_transition",
+                        "from": from,
+                        "to": to,
+                        "reason": "User-initiated phase complete",
+                        "evidence": evidence,
+                        "user_initiated": true
+                    }),
+                );
+
+                // Fuxi handoff (same as normal)
+                if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
+                    let _ = self.store.append_event(
+                        &self.session_state.session_id,
+                        &json!({
+                            "ts": Utc::now().to_rfc3339(),
+                            "event": "fuxi_handoff",
+                            "plan_path": ".omd/plans/latest.md",
+                            "message": "Plan ready. Use /omd-execute to start Pangu.",
+                        }),
+                    );
+                }
+
+                self.audit_log.clear();
+                json!({
+                    "ok": true,
+                    "phase": to,
+                    "message": format!("User forced transition from {} to {}. Tool availability updated.", from, to),
+                    "tools_changed": true,
+                    "user_initiated": true
+                })
+            }
+            Err(e) => json!({
+                "ok": false,
+                "error": e,
+                "current_phase": from,
+                "valid_next_phases": self.fsm.valid_next_phases()
+            }),
+        }
+    }
+
     /// Check if there's an unfinished session at the given workspace.
     /// Used by Hongjun on startup to suggest resumption.
     pub fn detect_unfinished_session(workspace: &Path) -> Option<OmdSessionState> {
@@ -230,5 +291,80 @@ impl OmdRuntimeState {
 impl Drop for OmdRuntimeState {
     fn drop(&mut self) {
         self.store.release_lock_owned();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    fn make_runtime(agent: OmdAgent) -> (OmdRuntimeState, TempDir) {
+        let tmp = TempDir::new().unwrap();
+        let rt = OmdRuntimeState::new(agent, tmp.path()).unwrap();
+        (rt, tmp)
+    }
+
+    #[test]
+    fn user_phase_complete_transitions_on_valid_target() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Tongtian);
+        assert_eq!(rt.fsm.current_phase_name(), "Explore");
+
+        let result = rt.handle_user_phase_complete("Execute");
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
+        assert_eq!(result.get("phase"), Some(&serde_json::json!("Execute")));
+        assert_eq!(result.get("user_initiated"), Some(&serde_json::json!(true)));
+        assert_eq!(result.get("tools_changed"), Some(&serde_json::json!(true)));
+        assert_eq!(rt.fsm.current_phase_name(), "Execute");
+    }
+
+    #[test]
+    fn user_phase_complete_rejects_invalid_target() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Tongtian);
+        assert_eq!(rt.fsm.current_phase_name(), "Explore");
+
+        // "Done" is not a valid successor of "Explore" for Tongtian
+        let result = rt.handle_user_phase_complete("Done");
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(false)));
+        assert!(result.get("error").is_some());
+        // Phase should remain unchanged
+        assert_eq!(rt.fsm.current_phase_name(), "Explore");
+    }
+
+    #[test]
+    fn user_phase_complete_rejects_nonexistent_phase() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Fuxi);
+        assert_eq!(rt.fsm.current_phase_name(), "Interview");
+
+        let result = rt.handle_user_phase_complete("NonexistentPhase");
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(false)));
+        assert!(result.get("error").unwrap().as_str().unwrap().contains("not a valid phase"));
+        assert_eq!(rt.fsm.current_phase_name(), "Interview");
+    }
+
+    #[test]
+    fn user_phase_complete_clears_audit_log() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Tongtian);
+        rt.push_audit_entry("cargo test".to_string(), 0);
+        assert_eq!(rt.audit_log.len(), 1);
+
+        let result = rt.handle_user_phase_complete("Execute");
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
+        assert!(rt.audit_log.is_empty());
+    }
+
+    #[test]
+    fn user_phase_complete_fuxi_handoff_on_done() {
+        let (mut rt, _tmp) = make_runtime(OmdAgent::Fuxi);
+        // Walk through Fuxi phases to get to Plan
+        rt.handle_user_phase_complete("Explore");
+        rt.handle_user_phase_complete("Architect");
+        rt.handle_user_phase_complete("Plan");
+        assert_eq!(rt.fsm.current_phase_name(), "Plan");
+
+        // Now transition to Done — should emit fuxi_handoff
+        let result = rt.handle_user_phase_complete("Done");
+        assert_eq!(result.get("ok"), Some(&serde_json::json!(true)));
+        assert_eq!(result.get("phase"), Some(&serde_json::json!("Done")));
     }
 }

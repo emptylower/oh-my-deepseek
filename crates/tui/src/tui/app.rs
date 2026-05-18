@@ -4156,6 +4156,10 @@ pub enum AppAction {
         model: String,
         mode: String,
     },
+    /// User-initiated OMD phase complete (escape hatch for stalled phases).
+    OmdPhaseComplete {
+        target_phase: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

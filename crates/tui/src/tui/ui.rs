@@ -4646,6 +4646,11 @@ async fn apply_command_result(
                 });
                 app.status_message = Some(status);
             }
+            AppAction::OmdPhaseComplete { target_phase } => {
+                let _ = engine_handle
+                    .send(Op::OmdUserPhaseComplete { target_phase })
+                    .await;
+            }
         }
     }
 

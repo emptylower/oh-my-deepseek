@@ -67,16 +67,14 @@ impl ToolSpec for OmdPhaseCompleteTool {
             for ev_value in &evidence {
                 // Try to parse as EvidenceClaim
                 if let Ok(claim) = serde_json::from_value::<omd::EvidenceClaim>(ev_value.clone()) {
-                    // ExplicitSkip bypasses verification — it's an explicit acknowledgment
-                    // that evidence is unavailable. Must include a non-empty reason.
-                    if let omd::EvidenceClaim::ExplicitSkip { ref reason } = claim {
-                        if reason.trim().is_empty() {
-                            return Err(ToolError::execution_failed(
-                                "ExplicitSkip requires a non-empty reason explaining why \
-                                 evidence is being skipped.".to_string()
-                            ));
-                        }
-                        continue;
+                    // ExplicitSkip cannot be used by the model. Phase transitions
+                    // requiring evidence bypass must be initiated by the user via
+                    // /omd-phase-complete <target_phase>.
+                    if let omd::EvidenceClaim::ExplicitSkip { .. } = claim {
+                        return Err(ToolError::execution_failed(
+                            "ExplicitSkip cannot be used by the model. Phase transitions requiring \
+                             evidence bypass must be initiated by the user via /omd-phase-complete <target_phase>.".to_string()
+                        ));
                     }
                     match omd::verify_claim(&claim, workspace, audit_log) {
                         Ok(omd::VerificationResult::Verified { .. }) => {},
@@ -123,8 +121,9 @@ impl ToolSpec for OmdPhaseCompleteTool {
                 }).collect();
                 return Err(ToolError::execution_failed(format!(
                     "Transition from '{}' to '{}' requires evidence of type(s): {:?}. \
-                     Provide the required evidence or use ExplicitSkip with a reason.",
-                    current_phase.name(), next_phase, missing_names
+                     Provide the required evidence, or ask the user to run \
+                     /omd-phase-complete {} to bypass evidence verification.",
+                    current_phase.name(), next_phase, missing_names, next_phase
                 )));
             }
         }
