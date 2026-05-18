@@ -472,18 +472,35 @@ fn has_sgr_mouse_marker(run: &[char]) -> bool {
 const MAX_SUBMITTED_INPUT_CHARS: usize = 16_000;
 const MAX_DRAFT_HISTORY: usize = 50;
 
+/// Check if running as the `deepseek-omd` binary (OMD-only mode).
+/// When true, only OMD agents are available — native Agent/Plan/YOLO are hidden.
+pub fn is_omd_binary() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.file_name().map(|f| f.to_string_lossy().contains("omd")))
+        .unwrap_or(false)
+}
+
 impl AppMode {
     #[must_use]
     pub fn from_setting(value: &str) -> Self {
+        let omd_only = is_omd_binary();
         match value.trim().to_ascii_lowercase().as_str() {
-            "plan" => Self::Plan,
-            "yolo" => Self::Yolo,
+            "plan" if !omd_only => Self::Plan,
+            "yolo" if !omd_only => Self::Yolo,
+            "agent" if !omd_only => Self::Agent,
             "omd-tongtian" | "tongtian" => Self::OmdTongtian,
             "omd-fuxi" | "fuxi" => Self::OmdFuxi,
             "omd-pangu" | "pangu" => Self::OmdPangu,
             "omd-hongjun" | "hongjun" => Self::OmdHongjun,
+            _ if omd_only => Self::OmdHongjun, // default to router in OMD mode
             _ => Self::Agent,
         }
+    }
+
+    /// Whether this is an OMD orchestrator mode.
+    pub fn is_omd(self) -> bool {
+        matches!(self, Self::OmdTongtian | Self::OmdFuxi | Self::OmdPangu | Self::OmdHongjun)
     }
 
     #[must_use]
@@ -1397,9 +1414,12 @@ impl App {
                 })
         };
 
-        // Start in YOLO mode if --yolo flag was passed
+        // Start in YOLO mode if --yolo flag was passed.
+        // OMD binary defaults to Hongjun (router) — native modes are not available.
         let preferred_mode = AppMode::from_setting(&settings.default_mode);
-        let initial_mode = if yolo {
+        let initial_mode = if is_omd_binary() {
+            if preferred_mode.is_omd() { preferred_mode } else { AppMode::OmdHongjun }
+        } else if yolo {
             AppMode::Yolo
         } else if start_in_agent_mode {
             AppMode::Agent
@@ -1774,16 +1794,28 @@ impl App {
         true
     }
 
-    /// Cycle through modes: Plan → Agent → Yolo → OmdTongtian → OmdFuxi → OmdPangu → OmdHongjun → Plan.
+    /// Cycle through modes.
+    /// OMD binary: Hongjun → Tongtian → Fuxi → Pangu → Hongjun
+    /// TUI binary: Plan → Agent → Yolo → Tongtian → Fuxi → Pangu → Hongjun → Plan
     pub fn cycle_mode(&mut self) {
-        let next = match self.mode {
-            AppMode::Plan => AppMode::Agent,
-            AppMode::Agent => AppMode::Yolo,
-            AppMode::Yolo => AppMode::OmdTongtian,
-            AppMode::OmdTongtian => AppMode::OmdFuxi,
-            AppMode::OmdFuxi => AppMode::OmdPangu,
-            AppMode::OmdPangu => AppMode::OmdHongjun,
-            AppMode::OmdHongjun => AppMode::Plan,
+        let next = if is_omd_binary() {
+            match self.mode {
+                AppMode::OmdHongjun => AppMode::OmdTongtian,
+                AppMode::OmdTongtian => AppMode::OmdFuxi,
+                AppMode::OmdFuxi => AppMode::OmdPangu,
+                AppMode::OmdPangu => AppMode::OmdHongjun,
+                _ => AppMode::OmdHongjun, // fallback to router
+            }
+        } else {
+            match self.mode {
+                AppMode::Plan => AppMode::Agent,
+                AppMode::Agent => AppMode::Yolo,
+                AppMode::Yolo => AppMode::OmdTongtian,
+                AppMode::OmdTongtian => AppMode::OmdFuxi,
+                AppMode::OmdFuxi => AppMode::OmdPangu,
+                AppMode::OmdPangu => AppMode::OmdHongjun,
+                AppMode::OmdHongjun => AppMode::Plan,
+            }
         };
         let _ = self.set_mode(next);
     }
@@ -1791,14 +1823,24 @@ impl App {
     /// Cycle through modes in reverse.
     #[allow(dead_code)]
     pub fn cycle_mode_reverse(&mut self) {
-        let next = match self.mode {
-            AppMode::Agent => AppMode::Plan,
-            AppMode::Yolo => AppMode::Agent,
-            AppMode::Plan => AppMode::OmdHongjun,
-            AppMode::OmdTongtian => AppMode::Yolo,
-            AppMode::OmdFuxi => AppMode::OmdTongtian,
-            AppMode::OmdPangu => AppMode::OmdFuxi,
-            AppMode::OmdHongjun => AppMode::OmdPangu,
+        let next = if is_omd_binary() {
+            match self.mode {
+                AppMode::OmdHongjun => AppMode::OmdPangu,
+                AppMode::OmdTongtian => AppMode::OmdHongjun,
+                AppMode::OmdFuxi => AppMode::OmdTongtian,
+                AppMode::OmdPangu => AppMode::OmdFuxi,
+                _ => AppMode::OmdHongjun,
+            }
+        } else {
+            match self.mode {
+                AppMode::Agent => AppMode::Plan,
+                AppMode::Yolo => AppMode::Agent,
+                AppMode::Plan => AppMode::OmdHongjun,
+                AppMode::OmdTongtian => AppMode::Yolo,
+                AppMode::OmdFuxi => AppMode::OmdTongtian,
+                AppMode::OmdPangu => AppMode::OmdFuxi,
+                AppMode::OmdHongjun => AppMode::OmdPangu,
+            }
         };
         let _ = self.set_mode(next);
     }
