@@ -281,6 +281,7 @@ impl OmdStateStore {
                                     "Done" => Some(crate::tasks::TaskStatus::Done),
                                     "Failed" => Some(crate::tasks::TaskStatus::Failed),
                                     "Blocked" => Some(crate::tasks::TaskStatus::Blocked),
+                                    "Skipped" => Some(crate::tasks::TaskStatus::Skipped),
                                     _ => None,
                                 };
                                 if let Some(s) = status {

@@ -78,7 +78,6 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
             "read_file", "grep_files", "file_search", "list_dir",
             "exec_shell", "exec_shell_wait",
             "git_status", "git_diff",
-            "omd_checkpoint",
         ],
         can_write_code: false,
         can_delegate: false,

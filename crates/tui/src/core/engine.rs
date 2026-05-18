@@ -814,6 +814,14 @@ impl Engine {
                         let mut state = rt.write().await;
                         let result = state.handle_user_phase_complete(&target_phase);
                         if result.get("ok") == Some(&serde_json::json!(true)) {
+                            // Emit FuxiHandoff event if this was a Fuxi→Done transition
+                            if result.get("fuxi_handoff") == Some(&serde_json::json!(true)) {
+                                let plan_path = result.get("plan_path")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or(".omd/plans/latest.md")
+                                    .to_string();
+                                let _ = self.tx_event.send(Event::FuxiHandoff { plan_path }).await;
+                            }
                             let message = result.get("message").and_then(|v| v.as_str()).unwrap_or("Phase transition complete.");
                             format!("[OMD] {}", message)
                         } else {
