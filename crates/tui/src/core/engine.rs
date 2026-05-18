@@ -816,9 +816,11 @@ impl Engine {
                         if result.get("ok") == Some(&serde_json::json!(true)) {
                             // Emit FuxiHandoff event if this was a Fuxi→Done transition
                             if result.get("fuxi_handoff") == Some(&serde_json::json!(true)) {
+                                // plan_path may be absent (user path) — empty triggers
+                                // /omd-execute no-arg which auto-resolves the most recent plan.
                                 let plan_path = result.get("plan_path")
                                     .and_then(|v| v.as_str())
-                                    .unwrap_or(".omd/plans/latest.md")
+                                    .unwrap_or("")
                                     .to_string();
                                 let _ = self.tx_event.send(Event::FuxiHandoff { plan_path }).await;
                             }

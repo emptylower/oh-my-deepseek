@@ -85,10 +85,28 @@ impl OmdRuntimeState {
         // Hydrate FSM at the recovered phase
         let fsm = OmdFsm::with_phase(agent, &effective_phase)?;
 
-        // Restore task_graph: events are authoritative for task STATUS (source of truth).
-        // Fall back to current.json only when events have no task data.
+        // Restore task_graph: events are authoritative for task STATUS.
+        // Merge richer metadata (changed_files, evidence) from current.json snapshot.
+        // Fall back to current.json entirely when events have no task data.
         let task_graph = event_state.as_ref()
             .and_then(|s| s.task_graph.clone())
+            .map(|mut event_graph| {
+                // Merge metadata from current.json into event-derived graph.
+                // Event replay gives us correct status but lacks changed_files/evidence.
+                if let Some(ref cj_graph) = session_state.task_graph {
+                    for event_task in &mut event_graph.tasks {
+                        if let Some(cj_task) = cj_graph.get(&event_task.id) {
+                            if event_task.changed_files.is_empty() {
+                                event_task.changed_files = cj_task.changed_files.clone();
+                            }
+                            if event_task.evidence.is_empty() {
+                                event_task.evidence = cj_task.evidence.clone();
+                            }
+                        }
+                    }
+                }
+                event_graph
+            })
             .or_else(|| session_state.task_graph.clone());
 
         // Update current.json if state was corrected from events
@@ -350,10 +368,11 @@ impl OmdRuntimeState {
                     "tools_changed": true,
                     "user_initiated": true
                 });
-                // Include fuxi_handoff in return so engine can trigger the widget
+                // Include fuxi_handoff in return so engine can trigger the widget.
+                // No plan_path here — user path doesn't have evidence to extract from.
+                // The UI will call /omd-execute without arguments to auto-resolve.
                 if matches!(self.fsm.agent(), OmdAgent::Fuxi) && to == "Done" {
                     result["fuxi_handoff"] = json!(true);
-                    result["plan_path"] = json!(".omd/plans/latest.md");
                 }
                 result
             }

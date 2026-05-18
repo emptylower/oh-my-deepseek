@@ -93,6 +93,25 @@ fn run_git_diff_stat(workspace: &Path, args: &[&str]) -> Result<String, String> 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
+/// Get untracked files (new files not yet staged).
+fn run_git_untracked(workspace: &Path) -> Result<Vec<String>, String> {
+    let output = std::process::Command::new("git")
+        .args(["ls-files", "--others", "--exclude-standard"])
+        .current_dir(workspace)
+        .output()
+        .map_err(|e| format!("Failed to run git ls-files: {}", e))?;
+
+    if !output.status.success() {
+        return Err("git ls-files failed".to_string());
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.to_string())
+        .collect())
+}
+
 /// Verify an evidence claim against the filesystem/state.
 /// `audit_log` is the list of (command, exit_code) tuples recently executed in this session.
 /// Returns Ok(VerificationResult) on success, Err(reason) on failure.
@@ -159,21 +178,26 @@ pub fn verify_claim(
 
             let file_stats = parse_git_diff_stat(&stat_output);
 
-            // Verify each claimed file appears in the actual diff output.
-            // When git diff --numstat produced results, require each claimed file to be listed.
-            // When no diff output is available (e.g. not a git repo in tests), fall back to
-            // filesystem existence check so existing tests keep passing.
-            if !file_stats.is_empty() {
-                let stat_paths: Vec<&str> =
-                    file_stats.iter().map(|f| f.path.as_str()).collect();
+            // Also detect untracked files (new files not yet staged).
+            let untracked_files: Vec<String> = if git_available {
+                run_git_untracked(workspace).unwrap_or_default()
+            } else {
+                Vec::new()
+            };
 
+            // Build combined set of known-changed paths: diff output + untracked.
+            let mut all_changed: Vec<String> = file_stats.iter().map(|f| f.path.clone()).collect();
+            for uf in &untracked_files {
+                all_changed.push(uf.clone());
+            }
+
+            if !all_changed.is_empty() {
                 for claimed in changed_files {
-                    // Normalize: strip leading "./" if present, then require an exact match.
                     let claimed_norm = normalize_path(claimed.trim_start_matches("./"));
-                    let found = stat_paths.iter().any(|p| normalize_path(p) == claimed_norm);
+                    let found = all_changed.iter().any(|p| normalize_path(p) == claimed_norm);
                     if !found {
                         return Err(format!(
-                            "Claimed changed file '{}' not found in git diff --numstat output",
+                            "Claimed changed file '{}' not found in git diff or untracked files",
                             claimed
                         ));
                     }
@@ -181,13 +205,13 @@ pub fn verify_claim(
 
                 Ok(VerificationResult::Verified {
                     method: "git_diff_stat".to_string(),
-                    stats: Some(GitDiffStats { files: file_stats }),
+                    stats: if file_stats.is_empty() { None } else { Some(GitDiffStats { files: file_stats }) },
                 })
             } else if git_available {
-                // Git is available but no changes detected — reject.
+                // Git available but no changes AND no untracked files — reject.
                 return Err(
-                    "No changes detected by git diff --numstat. GitDiff evidence requires \
-                     actual file changes visible to git.".to_string()
+                    "No changes detected by git diff or untracked files. GitDiff evidence \
+                     requires actual file changes visible to git.".to_string()
                 );
             } else {
                 // Git not available (non-git environment / tests) — filesystem fallback.
