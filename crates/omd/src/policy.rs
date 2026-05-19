@@ -76,7 +76,8 @@ static TONGTIAN_EXPLORE: &[&str] = &[
     "git_status", "git_diff", "git_log", "git_show", "git_blame",
     "diagnostics",
     "exec_shell", "exec_shell_wait",
-    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
+    "omd_delegate", "agent_eval", "agent_close",  // OMD delegation
+    "agent_open",                                  // Native agent spawn
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 
@@ -96,13 +97,15 @@ static FUXI_INTERVIEW: &[&str] = &[
 static FUXI_EXPLORE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_log", "git_diff", "git_show", "git_blame",
-    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
+    "omd_delegate", "agent_eval", "agent_close",  // OMD delegation (with worker restrictions)
+    "agent_open",                                  // Native agent spawn (model prefers this name)
     "omd_phase_complete", "omd_state_read",
 ];
 static FUXI_ARCHITECT: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_log", "git_diff",
-    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
+    "omd_delegate", "agent_eval", "agent_close",  // OMD delegation (with worker restrictions)
+    "agent_open",                                  // Native agent spawn
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 static FUXI_PLAN: &[&str] = &[
@@ -124,12 +127,14 @@ static PANGU_DECOMPOSE: &[&str] = &[
 static PANGU_DELEGATE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "omd_delegate", "agent_eval", "agent_close",
+    "agent_open",  // Native agent spawn (model compatibility)
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 static PANGU_VERIFY: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "exec_shell", "exec_shell_wait",
     "omd_delegate", "agent_eval", "agent_close",
+    "agent_open",  // Native agent spawn
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 

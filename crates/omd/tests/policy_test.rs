@@ -15,10 +15,12 @@ fn tongtian_explore_allows_read_tools_only() {
     assert!(policy.is_allowed("omd_state_read"));
     // exec_shell is allowed in Explore (read-only, per spec)
     assert!(policy.is_allowed("exec_shell"));
+    // Delegation (for info-gathering via read-only workers)
+    assert!(policy.is_allowed("agent_open"));
+    assert!(policy.is_allowed("omd_delegate"));
     // Blocked
     assert!(!policy.is_allowed("edit_file"));
     assert!(!policy.is_allowed("write_file"));
-    assert!(!policy.is_allowed("agent_open"));
 }
 
 #[test]
@@ -50,8 +52,14 @@ fn fuxi_interview_explore_architect_are_read_only() {
         assert!(policy.is_allowed("omd_phase_complete"));
         assert!(!policy.is_allowed("edit_file"), "Fuxi {:?} must NOT allow edit_file", phase);
         assert!(!policy.is_allowed("write_file"), "Fuxi {:?} must NOT allow write_file", phase);
-        assert!(!policy.is_allowed("agent_open"), "Fuxi {:?} must NOT allow agent_open", phase);
     }
+    // Interview: no delegation
+    let interview = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Interview));
+    assert!(!interview.is_allowed("agent_open"));
+    // Explore/Architect: delegation allowed (both omd_delegate and native agent_open)
+    let explore = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Explore));
+    assert!(explore.is_allowed("agent_open"));
+    assert!(explore.is_allowed("omd_delegate"));
 }
 
 #[test]

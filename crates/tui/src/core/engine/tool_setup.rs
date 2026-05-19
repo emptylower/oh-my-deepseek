@@ -79,12 +79,13 @@ impl Engine {
                             )
                             .with_max_spawn_depth(0);
 
+                            // OMD delegation tool (with worker restrictions)
                             b = b
                                 .with_tool(Arc::new(
                                     crate::tools::omd_delegate::OmdDelegateTool::new(
                                         omd_rt.clone(),
                                         self.subagent_manager.clone(),
-                                        sa_runtime,
+                                        sa_runtime.clone(),
                                     ),
                                 ))
                                 .with_tool(Arc::new(
@@ -97,6 +98,14 @@ impl Engine {
                                         self.subagent_manager.clone(),
                                     ),
                                 ));
+                            // Native agent_open — model prefers this name from training.
+                            // Works alongside omd_delegate; doesn't have worker restrictions.
+                            b = b.with_tool(Arc::new(
+                                crate::tools::subagent::AgentSpawnTool::new(
+                                    self.subagent_manager.clone(),
+                                    sa_runtime,
+                                ),
+                            ));
                         }
                     }
                     return b;
