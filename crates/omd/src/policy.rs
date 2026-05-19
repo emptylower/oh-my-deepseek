@@ -48,8 +48,18 @@ impl PhaseToolPolicy {
         }
     }
 
+    /// Tool discovery tools are always allowed — they're read-only and help the
+    /// model find available tools. Without them, the model can't navigate the
+    /// tool ecosystem (it tries tool_search_tool_regex/bm25 to find omd_delegate).
+    const ALWAYS_ALLOWED: &[&str] = &[
+        "tool_search_tool_regex",
+        "tool_search_tool_bm25",
+    ];
+
     pub fn is_allowed(&self, tool_name: &str) -> bool {
-        self.allow_all || self.allowed.contains(&tool_name)
+        self.allow_all
+            || self.allowed.contains(&tool_name)
+            || Self::ALWAYS_ALLOWED.contains(&tool_name)
     }
 
     pub fn is_allow_all(&self) -> bool { self.allow_all }
