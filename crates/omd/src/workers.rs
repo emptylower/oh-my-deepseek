@@ -126,6 +126,19 @@ static ALL_WORKERS: &[OmdWorkerConfig] = &[
         reasoning_effort: "off",
     },
     OmdWorkerConfig {
+        id: "tingfeng",
+        display_name: "听风 Tingfeng",
+        role_description: "Web researcher — searches the web and fetches URLs for information gathering",
+        system_prompt_prefix: "You are Tingfeng, a web researcher. Your job is to search the web for relevant information, fetch specific URLs, and summarize findings. Report facts with source URLs. Do NOT modify any files.",
+        allowed_tools: &[
+            "web_search", "fetch_url",
+            "read_file", "list_dir",
+        ],
+        can_write_code: false,
+        can_delegate: false,
+        reasoning_effort: "off",
+    },
+    OmdWorkerConfig {
         id: "zhurong",
         display_name: "祝融 Zhurong",
         role_description: "Debugger — diagnoses and traces issues",

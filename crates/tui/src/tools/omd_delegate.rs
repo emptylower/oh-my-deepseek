@@ -105,14 +105,45 @@ impl ToolSpec for OmdDelegateTool {
             ))
         })?;
 
-        // In Pangu Verify phase, only nuwa is allowed
+        // Worker delegation restrictions per agent/phase
         {
             let state = self.runtime.read().await;
+            let agent = format!("{:?}", state.fsm.agent());
             let phase_name = state.fsm.current_phase_name();
-            if phase_name == "Verify" && agent_id != "nuwa" {
-                return Err(ToolError::permission_denied(format!(
-                    "In Verify phase, only 'nuwa' can be delegated to (got '{}')", agent_id
-                )));
+
+            // Read-only workers only — for agents gathering information (not executing)
+            const READ_ONLY_WORKERS: &[&str] = &["kunpeng", "yangmei", "nuwa", "tingfeng"];
+
+            match (agent.as_str(), phase_name) {
+                // Pangu Verify: only Nuwa
+                (_, "Verify") => {
+                    if agent_id != "nuwa" {
+                        return Err(ToolError::permission_denied(format!(
+                            "In Verify phase, only 'nuwa' can be delegated to (got '{}')", agent_id
+                        )));
+                    }
+                }
+                // Fuxi: only read-only workers (information gathering, not implementation)
+                ("Fuxi", _) => {
+                    if !READ_ONLY_WORKERS.contains(&agent_id) {
+                        return Err(ToolError::permission_denied(format!(
+                            "Fuxi can only delegate to read-only workers ({:?}). Got '{}'. \
+                             Fuxi gathers information — implementation is Pangu's job.",
+                            READ_ONLY_WORKERS, agent_id
+                        )));
+                    }
+                }
+                // Tongtian Explore: only read-only workers
+                ("Tongtian", "Explore") => {
+                    if !READ_ONLY_WORKERS.contains(&agent_id) {
+                        return Err(ToolError::permission_denied(format!(
+                            "In Explore phase, only read-only workers ({:?}) can be delegated to. Got '{}'.",
+                            READ_ONLY_WORKERS, agent_id
+                        )));
+                    }
+                }
+                // Pangu Delegate: all workers allowed
+                _ => {}
             }
         }
 

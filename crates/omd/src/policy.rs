@@ -76,6 +76,7 @@ static TONGTIAN_EXPLORE: &[&str] = &[
     "git_status", "git_diff", "git_log", "git_show", "git_blame",
     "diagnostics",
     "exec_shell", "exec_shell_wait",
+    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 
@@ -95,11 +96,13 @@ static FUXI_INTERVIEW: &[&str] = &[
 static FUXI_EXPLORE: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_log", "git_diff", "git_show", "git_blame",
+    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
     "omd_phase_complete", "omd_state_read",
 ];
 static FUXI_ARCHITECT: &[&str] = &[
     "read_file", "grep_files", "file_search", "list_dir",
     "git_log", "git_diff",
+    "omd_delegate", "agent_eval", "agent_close",  // Delegate read-only workers for info gathering
     "omd_phase_complete", "omd_checkpoint", "omd_state_read",
 ];
 static FUXI_PLAN: &[&str] = &[

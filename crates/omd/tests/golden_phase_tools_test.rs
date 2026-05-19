@@ -31,11 +31,15 @@ fn tongtian_explore_exact_permissions() {
     assert!(policy.is_allowed("omd_checkpoint"));
     assert!(policy.is_allowed("omd_state_read"));
 
+    // Delegation tools (for info-gathering via read-only workers)
+    assert!(policy.is_allowed("omd_delegate"));
+    assert!(policy.is_allowed("agent_eval"));
+    assert!(policy.is_allowed("agent_close"));
+
     // Blocked tools
     assert!(!policy.is_allowed("write_file"));
     assert!(!policy.is_allowed("edit_file"));
     assert!(!policy.is_allowed("apply_patch"));
-    assert!(!policy.is_allowed("omd_delegate"));
 }
 
 // ── 2. Tongtian::Execute ──────────────────────────────────────────────────────
@@ -111,6 +115,25 @@ fn fuxi_interview_read_only() {
     assert!(!policy.is_allowed("omd_delegate"));
 }
 
+// ── 4b. Fuxi::Explore has delegation ─────────────────────────────────────────
+
+#[test]
+fn fuxi_explore_has_delegation() {
+    let policy = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Explore));
+    assert!(!policy.is_allow_all());
+    // Read tools
+    assert!(policy.is_allowed("read_file"));
+    assert!(policy.is_allowed("git_log"));
+    assert!(policy.is_allowed("git_diff"));
+    // Delegation for info-gathering (read-only workers enforced in omd_delegate)
+    assert!(policy.is_allowed("omd_delegate"));
+    assert!(policy.is_allowed("agent_eval"));
+    assert!(policy.is_allowed("agent_close"));
+    // No writes
+    assert!(!policy.is_allowed("write_file"));
+    assert!(!policy.is_allowed("exec_shell"));
+}
+
 // ── 5. Fuxi::Plan ────────────────────────────────────────────────────────────
 
 #[test]
@@ -139,11 +162,15 @@ fn fuxi_plan_limited_write() {
 // ── 5b. Fuxi::Architect has omd_checkpoint ──────────────────────────────────
 
 #[test]
-fn fuxi_architect_has_checkpoint() {
+fn fuxi_architect_has_checkpoint_and_delegation() {
     let policy = PhaseToolPolicy::for_phase(&OmdPhase::Fuxi(FuxiPhase::Architect));
     assert!(policy.is_allowed("omd_checkpoint"), "Fuxi Architect should have omd_checkpoint");
     assert!(policy.is_allowed("omd_phase_complete"));
     assert!(policy.is_allowed("omd_state_read"));
+    // Delegation for info-gathering (read-only workers enforced in omd_delegate)
+    assert!(policy.is_allowed("omd_delegate"));
+    assert!(policy.is_allowed("agent_eval"));
+    assert!(policy.is_allowed("agent_close"));
     assert!(!policy.is_allowed("write_file"));
 }
 
